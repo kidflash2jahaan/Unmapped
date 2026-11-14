@@ -87,7 +87,8 @@
   "lat": 33.6621,
   "lon": -117.99914,
   "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Triangle_Park_%26_Main_Street_Library,_Sept_2014_(1).JPG), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "library run before the test lol"
  },
  {
   "id": "hb02",
@@ -96,7 +97,8 @@
   "lat": 33.6621,
   "lon": -117.99914,
   "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Triangle_Park_%26_Main_Street_Library,_Sept_2014_(3).JPG), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "study spot every saturday"
  },
  {
   "id": "hb04",
@@ -105,7 +107,8 @@
   "lat": 33.6786,
   "lon": -118.00093,
   "credit": "Uzbekman24, CC BY 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_Beach_Police_Department.jpg), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "dad's work is right here"
  },
  {
   "id": "hb06",
@@ -114,7 +117,8 @@
   "lat": 33.66944,
   "lon": -118.005,
   "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_Beach_Gymnasium,_Sept_2014.JPG), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "swim practice at 6am again"
  },
  {
   "id": "hb09",
@@ -123,7 +127,8 @@
   "lat": 33.70669,
   "lon": -118.05524,
   "credit": "Crishazzard, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Overlook_On_Mesa_Trail_at_Bolsa_Chica_Ecological_Reserve.jpg), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "sunset walk near home"
  },
  {
   "id": "hb11",
@@ -132,7 +137,8 @@
   "lat": 33.70208,
   "lon": -117.95471,
   "credit": "Amin Eshaiker, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Brookhurst_St_%26_Talbert_Ave,_Fountain_Valley,_California_(2012-03-25).jpg), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "gas station snack run after school"
  },
  {
   "id": "hb15",
@@ -141,7 +147,8 @@
   "lat": 33.73465,
   "lon": -117.99734,
   "credit": "Dialh, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Old_World_Village_scene.jpg), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "first day of sophomore year, class of 2029"
  },
  {
   "id": "hb17",
@@ -150,6 +157,7 @@
   "lat": 33.63566,
   "lon": -117.97162,
   "credit": "FASTILY, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_State_Beach_3_2018-05-20.jpg), resized",
-  "mode": "profile"
+  "mode": "profile",
+  "caption": "beach day with the robotics team"
  }
 ]

@@ -44,17 +44,47 @@ def model_view(pixels):
     return (square - CLIP_MEAN) / CLIP_STD
 
 
-def location_logits(pixels):
-    features = F.normalize(model.image_encoder(model_view(pixels)), dim=1)
+def view_logits(view):
+    features = F.normalize(model.image_encoder(view), dim=1)
     return model.logit_scale.exp() * features @ gallery_features.T
 
 
-def predict(image, top_k=5):
+def location_logits(pixels):
+    return view_logits(model_view(pixels))
+
+
+def probabilities(image):
     with torch.no_grad():
-        probs = location_logits(to_pixels(image)).softmax(dim=-1)[0]
+        return location_logits(to_pixels(image)).softmax(dim=-1)[0]
+
+
+def predict(image, top_k=5):
+    probs = probabilities(image)
     values, indices = probs.topk(top_k)
     points = gallery[indices].cpu().tolist()
     return [{"lat": lat, "lon": lon, "prob": p} for (lat, lon), p in zip(points, values.cpu().tolist())]
+
+
+RADIUS_STEPS_KM = [1, 5, 25, 100, 500, 2500]
+
+
+# top guess plus a coarse radius, never under 1 km
+def summarize(probs, top_k=5):
+    lat, lon = gallery[probs.argmax()].tolist()
+    distances = gallery_distances_km(lat, lon)
+    # smallest circle holding half the guess
+    radius = next((step for step in RADIUS_STEPS_KM if probs[distances <= step].sum() >= 0.5), RADIUS_STEPS_KM[-1])
+    values, indices = probs.topk(50)
+    # other guesses at least 25 km apart
+    top = []
+    for (guess_lat, guess_lon), prob in zip(gallery[indices].tolist(), values.tolist()):
+        if len(top) < top_k and all(distance_km(guess_lat, guess_lon, t["lat"], t["lon"]) >= 25 for t in top):
+            top.append({"lat": round(guess_lat, 2), "lon": round(guess_lon, 2), "prob": round(prob, 4)})
+    return {"lat": round(lat, 2), "lon": round(lon, 2), "radius_km": radius, "top": top}
+
+
+def locate(image):
+    return summarize(probabilities(image))
 
 
 # haversine distance
