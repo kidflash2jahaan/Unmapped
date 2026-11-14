@@ -1,4 +1,5 @@
 import math
+import random
 
 import numpy as np
 import torch
@@ -12,6 +13,7 @@ model = GeoCLIP().to(device).eval()
 for param in model.parameters():
     param.requires_grad = False
 
+# encode the 100K candidate locations
 gallery = model.gps_gallery.to(device)
 with torch.no_grad():
     gallery_features = F.normalize(model.location_encoder(gallery), dim=1)
@@ -30,6 +32,7 @@ def to_image(pixels):
     return Image.fromarray(np.round(array * 255).astype(np.uint8))
 
 
+# resize + crop to GeoCLIP's 224x224 input
 def model_view(pixels):
     height, width = pixels.shape[2:]
     scale = 224 / min(height, width)
@@ -54,6 +57,7 @@ def predict(image, top_k=5):
     return [{"lat": lat, "lon": lon, "prob": p} for (lat, lon), p in zip(points, values.cpu().tolist())]
 
 
+# haversine distance
 def distance_km(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(math.radians, (lat1, lon1, lat2, lon2))
     a = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
@@ -67,17 +71,39 @@ def gallery_distances_km(lat, lon):
     return 6371 * 2 * torch.asin(torch.sqrt(a.clamp(0, 1)))
 
 
-def cloak(image, lat, lon, budget=4 / 255, steps=100, step_size=0.5 / 255):
+# random crop so the cloak survives cropping
+def random_crop(pixels):
+    height, width = pixels.shape[2:]
+    crop_height = int(height * random.uniform(0.7, 1.0))
+    crop_width = int(width * random.uniform(0.7, 1.0))
+    top = random.randint(0, height - crop_height)
+    left = random.randint(0, width - crop_width)
+    return pixels[:, :, top:top + crop_height, left:left + crop_width]
+
+
+# smaller budget in smooth areas like sky, where changes show
+def texture_budget(pixels, budget):
+    gray = pixels.mean(dim=1, keepdim=True)
+    detail = (gray - F.avg_pool2d(gray, 9, 1, 4)).abs()
+    detail = F.avg_pool2d(detail, 9, 1, 4)
+    return budget * (detail / 0.02).clamp(0.25, 1)
+
+
+def cloak(image, lat, lon, budget=4 / 255, steps=100):
+    step_size = budget / 8
     pixels = to_pixels(image)
+    limit = texture_budget(pixels, budget)
     distances = gallery_distances_km(lat, lon)
     change = torch.zeros_like(pixels, requires_grad=True)
     for _ in range(steps):
-        probs = location_logits(pixels + change).softmax(dim=-1)[0]
+        probs = location_logits(random_crop(pixels + change)).softmax(dim=-1)[0]
+        # expected error in km
         expected_error = (probs * distances).sum()
         expected_error.backward()
         with torch.no_grad():
+            # step toward more error, cap the change
             change += step_size * change.grad.sign()
-            change.clamp_(-budget, budget)
+            change.copy_(torch.clamp(change, -limit, limit))
             change.copy_((pixels + change).clamp(0, 1) - pixels)
         change.grad.zero_()
     return to_image((pixels + change).detach())
