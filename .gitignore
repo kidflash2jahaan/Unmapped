@@ -1,0 +1,10 @@
+private/
+.claude-scratch/
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+.env
+*.pt
+*.pth
