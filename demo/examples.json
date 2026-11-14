@@ -1,0 +1,155 @@
+[
+ {
+  "id": "stanford",
+  "title": "Stanford street corner",
+  "path": "demo/stanford.jpg",
+  "lat": 37.42871,
+  "lon": -122.16798,
+  "credit": "Photo by Jahaan Pardhanani",
+  "mode": "single"
+ },
+ {
+  "id": "spectrum",
+  "title": "Mall at night",
+  "path": "demo/spectrum.jpg",
+  "lat": 33.64948,
+  "lon": -117.74261,
+  "credit": "Photo by Jahaan Pardhanani",
+  "mode": "single"
+ },
+ {
+  "id": "dublin",
+  "title": "Dublin shopping street",
+  "path": "demo/dublin.jpg",
+  "lat": 53.34968,
+  "lon": -6.26175,
+  "credit": "Photo by Jahaan Pardhanani",
+  "mode": "single"
+ },
+ {
+  "id": "tesla",
+  "title": "Parking lot",
+  "path": "demo/tesla.jpg",
+  "lat": 33.57938,
+  "lon": -117.72493,
+  "credit": "Photo by Jahaan Pardhanani",
+  "mode": "single"
+ },
+ {
+  "id": "us11",
+  "title": "Downtown at dusk",
+  "path": "demo/us11.jpg",
+  "lat": 19.72601,
+  "lon": -155.08634,
+  "credit": "dronepicr, CC BY 2.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Hilo_streets_sunset_Big_island_Hawaii_Park_(31338239417).jpg), resized",
+  "mode": "single"
+ },
+ {
+  "id": "us01",
+  "title": "Rainy park",
+  "path": "demo/us01.jpg",
+  "lat": 45.48194,
+  "lon": -122.80611,
+  "credit": "Another Believer, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Beaverton,_Oregon_(2022)_-_20.jpg), resized",
+  "mode": "single"
+ },
+ {
+  "id": "us12",
+  "title": "Parking lot and storefronts",
+  "path": "demo/us12.jpg",
+  "lat": 19.72243,
+  "lon": -155.08927,
+  "credit": "Peter Gill, CC BY 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Colonial_Sugartown_-_Old_Hilo_-_panoramio.jpg), resized",
+  "mode": "single"
+ },
+ {
+  "id": "us09",
+  "title": "Small-town main street",
+  "path": "demo/us09.jpg",
+  "lat": 42.85194,
+  "lon": -72.55794,
+  "credit": "Artaxerxes, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:80_block_Main_Street_downtown_Brattleboro_VT_August_2023.jpg), resized",
+  "mode": "single"
+ },
+ {
+  "id": "us06",
+  "title": "Canyon town street",
+  "path": "demo/us06.jpg",
+  "lat": 31.44314,
+  "lon": -109.92003,
+  "credit": "Clay Gilliland from Chandler, U.S.A., CC BY-SA 2.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Bisbee,_Arizona_Tombstone_Canyon_(30551036616).jpg), resized",
+  "mode": "single"
+ },
+ {
+  "id": "hb01",
+  "title": "Triangle Park",
+  "path": "demo/hb01.jpg",
+  "lat": 33.6621,
+  "lon": -117.99914,
+  "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Triangle_Park_%26_Main_Street_Library,_Sept_2014_(1).JPG), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb02",
+  "title": "Main Street Library",
+  "path": "demo/hb02.jpg",
+  "lat": 33.6621,
+  "lon": -117.99914,
+  "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Triangle_Park_%26_Main_Street_Library,_Sept_2014_(3).JPG), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb04",
+  "title": "Huntington Beach Police Department / Civic Center",
+  "path": "demo/hb04.jpg",
+  "lat": 33.6786,
+  "lon": -118.00093,
+  "credit": "Uzbekman24, CC BY 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_Beach_Police_Department.jpg), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb06",
+  "title": "Huntington Beach Gymnasium and Pool",
+  "path": "demo/hb06.jpg",
+  "lat": 33.66944,
+  "lon": -118.005,
+  "credit": "Kathy92648, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_Beach_Gymnasium,_Sept_2014.JPG), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb09",
+  "title": "Bolsa Chica Ecological Reserve",
+  "path": "demo/hb09.jpg",
+  "lat": 33.70669,
+  "lon": -118.05524,
+  "credit": "Crishazzard, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Overlook_On_Mesa_Trail_at_Bolsa_Chica_Ecological_Reserve.jpg), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb11",
+  "title": "Brookhurst Street at Talbert Avenue intersection",
+  "path": "demo/hb11.jpg",
+  "lat": 33.70208,
+  "lon": -117.95471,
+  "credit": "Amin Eshaiker, CC BY-SA 3.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Brookhurst_St_%26_Talbert_Ave,_Fountain_Valley,_California_(2012-03-25).jpg), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb15",
+  "title": "Old World Village shopping center",
+  "path": "demo/hb15.jpg",
+  "lat": 33.73465,
+  "lon": -117.99734,
+  "credit": "Dialh, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Old_World_Village_scene.jpg), resized",
+  "mode": "profile"
+ },
+ {
+  "id": "hb17",
+  "title": "Huntington State Beach",
+  "path": "demo/hb17.jpg",
+  "lat": 33.63566,
+  "lon": -117.97162,
+  "credit": "FASTILY, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Huntington_State_Beach_3_2018-05-20.jpg), resized",
+  "mode": "profile"
+ }
+]
