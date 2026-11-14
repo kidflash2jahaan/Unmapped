@@ -1,0 +1,21 @@
+Vendored offline map assets (no network needed at runtime). Fetched 2026-11-14 from cdn.jsdelivr.net.
+
+d3.min.js              d3 7.9.0               ISC
+  https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js
+topojson-client.min.js topojson-client 3.1.0  ISC
+  https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js
+countries-50m.json     world-atlas 2.0.2      ISC (data: Natural Earth, public domain)
+  https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json
+land-50m.json          world-atlas 2.0.2      ISC (data: Natural Earth, public domain)
+  https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-50m.json
+states-10m.json        us-atlas 3.0.1         ISC (data: US Census Bureau cartographic boundaries, public domain)
+  https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json
+counties-10m.json      us-atlas 3.0.1         ISC (data: US Census Bureau cartographic boundaries, public domain)
+  https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/counties-10m.json
+
+ISC License: permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided the copyright notice and this permission notice appear in all copies. Provided "as is" without warranty.
+
+fonts/geist-latin.woff2       Geist (variable, Latin subset)       SIL Open Font License 1.1, (c) Vercel
+fonts/geist-mono-latin.woff2  Geist Mono (variable, Latin subset)  SIL Open Font License 1.1, (c) Vercel
+  Copied from the Next.js package (next/dist/next-devtools/server/font), no network fetch.
+  OFL text: https://openfontlicense.org
