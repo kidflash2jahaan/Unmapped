@@ -41,9 +41,11 @@ def privacy_score(has_gps, location_km, texts=0, faces=0, flags=0, cloaked=False
     if has_gps:
         score -= 50
     # tighter location, bigger penalty
-    penalty = next((penalty for limit, penalty in LOCATION_PENALTY if location_km <= limit), 0)
-    # the cloak stops open models, not commercial AI
-    score -= penalty // 2 if cloaked else penalty
+    for limit, penalty in LOCATION_PENALTY:
+        if location_km <= limit:
+            # the cloak stops open models, not commercial AI
+            score -= penalty // 2 if cloaked else penalty
+            break
     score -= 5 * min(texts, 4)
     score -= 5 * min(faces, 2)
     score -= 5 * min(flags, 4)
@@ -59,9 +61,9 @@ def reach_km(truth, location):
     return max(location["radius_km"], error_km(truth, location))
 
 
-def to_base64(image, kind):
+def png_base64(image):
     buffer = io.BytesIO()
-    image.save(buffer, kind)
+    image.save(buffer, "PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
 
@@ -111,7 +113,7 @@ def attack(image, info, truth=None):
         "faces": faces,
         "ambient": ambient,
         "heat": heat,
-        "heatmap_png": to_base64(picture, "PNG"),
+        "heatmap_png": png_base64(picture),
         "score": privacy_score(info["gps"] is not None, reach_km(truth, location), len(text), len(faces)),
         "width": image.width,
         "height": image.height,
@@ -120,7 +122,7 @@ def attack(image, info, truth=None):
     photos[photo_id] = {"image": image, "attack": result, "truth": truth, "known": known}
     # keep only the 20 newest photos
     if len(photos) > 20:
-        del photos[next(iter(photos))]
+        del photos[list(photos)[0]]
     return result
 
 

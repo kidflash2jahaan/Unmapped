@@ -10,8 +10,9 @@ from pydantic import BaseModel
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     for line in env_file.read_text().splitlines():
-        name, _, value = line.partition("=")
-        os.environ.setdefault(name.strip(), value.strip())
+        if "=" in line:
+            name, _, value = line.partition("=")
+            os.environ.setdefault(name.strip(), value.strip())
 
 enabled = bool(os.environ.get("ANTHROPIC_API_KEY"))
 

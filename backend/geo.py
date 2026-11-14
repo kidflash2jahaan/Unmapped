@@ -62,23 +62,25 @@ def predict(image, top_k=5):
     probs = probabilities(image)
     values, indices = probs.topk(top_k)
     points = gallery[indices].cpu().tolist()
-    return [{"lat": lat, "lon": lon, "prob": p} for (lat, lon), p in zip(points, values.cpu().tolist())]
+    return [{"lat": lat, "lon": lon, "prob": prob} for (lat, lon), prob in zip(points, values.cpu().tolist())]
 
 
 RADIUS_STEPS_KM = [1, 5, 25, 100, 500, 2500]
 
 
 # top guess plus a coarse radius, never under 1 km
-def summarize(probs, top_k=5):
+def summarize(probs):
     lat, lon = gallery[probs.argmax()].tolist()
     distances = gallery_distances_km(lat, lon)
     # smallest circle holding half the guess
-    radius = next((step for step in RADIUS_STEPS_KM if probs[distances <= step].sum() >= 0.5), RADIUS_STEPS_KM[-1])
+    for radius in RADIUS_STEPS_KM:
+        if probs[distances <= radius].sum() >= 0.5:
+            break
     values, indices = probs.topk(50)
     # other guesses at least 25 km apart
     top = []
     for (guess_lat, guess_lon), prob in zip(gallery[indices].tolist(), values.tolist()):
-        if len(top) < top_k and all(distance_km(guess_lat, guess_lon, t["lat"], t["lon"]) >= 25 for t in top):
+        if len(top) < 5 and all(distance_km(guess_lat, guess_lon, kept["lat"], kept["lon"]) >= 25 for kept in top):
             top.append({"lat": round(guess_lat, 2), "lon": round(guess_lon, 2), "prob": round(prob, 4)})
     return {"lat": round(lat, 2), "lon": round(lon, 2), "radius_km": radius, "top": top}
 
@@ -114,8 +116,8 @@ def random_crop(pixels):
 # smaller budget in smooth areas like sky, where changes show
 def texture_budget(pixels, budget):
     gray = pixels.mean(dim=1, keepdim=True)
-    detail = (gray - F.avg_pool2d(gray, 9, 1, 4)).abs()
-    detail = F.avg_pool2d(detail, 9, 1, 4)
+    detail = (gray - F.avg_pool2d(gray, kernel_size=9, stride=1, padding=4)).abs()
+    detail = F.avg_pool2d(detail, kernel_size=9, stride=1, padding=4)
     return budget * (detail / 0.02).clamp(0.25, 1)
 
 
@@ -133,7 +135,7 @@ def cloak(image, lat, lon, budget=4 / 255, steps=100):
         with torch.no_grad():
             # step toward more error, cap the change
             change += step_size * change.grad.sign()
-            change.copy_(torch.clamp(change, -limit, limit))
+            change.copy_(change.clamp(-limit, limit))
             change.copy_((pixels + change).clamp(0, 1) - pixels)
         change.grad.zero_()
     return to_image((pixels + change).detach())

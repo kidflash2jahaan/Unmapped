@@ -43,10 +43,28 @@ def overlap(a, b):
 # keep the most confident of overlapping boxes
 def merge(found):
     kept = []
-    for item in sorted(found, key=lambda item: (-item["confidence"], -len(item.get("text", "")))):
+    for item in sorted(found, key=lambda item: (item["confidence"], len(item.get("text", ""))), reverse=True):
         if all(overlap(item["box"], other["box"]) < 0.5 for other in kept):
             kept.append(item)
     return kept
+
+
+# join pieces of the same sign into one clue
+def group_signs(items):
+    groups = []
+    for item in sorted(items, key=lambda item: item["box"][1]):
+        left, top, right, bottom = item["box"]
+        pad = (bottom - top) / 2
+        for group in groups:
+            g_left, g_top, g_right, g_bottom = group["box"]
+            if left - pad < g_right and right + pad > g_left and top - pad < g_bottom and bottom + pad > g_top:
+                group["box"] = [min(left, g_left), min(top, g_top), max(right, g_right), max(bottom, g_bottom)]
+                group["text"] += " " + item["text"]
+                group["confidence"] = max(group["confidence"], item["confidence"])
+                break
+        else:
+            groups.append(dict(item))
+    return groups
 
 
 def find_text(image):
@@ -57,7 +75,7 @@ def find_text(image):
             for text, confidence, box in ocrmac.OCR(image.crop(tile), recognition_level="accurate").recognize():
                 if confidence >= 0.4 and len(text.strip()) >= 2:
                     found.append({"text": text, "confidence": round(confidence, 2), "box": to_image_box(box, tile)})
-    return merge(found)
+    return group_signs(merge(found))
 
 
 def find_faces(image):
@@ -103,7 +121,7 @@ def padded(image):
     return square
 
 
-def ambient_clues(image, top=3):
+def ambient_clues(image):
     with torch.no_grad():
         # center crop and whole photo
         views = torch.cat([geo.model_view(geo.to_pixels(image)), geo.model_view(geo.to_pixels(padded(image)))])
@@ -112,7 +130,7 @@ def ambient_clues(image, top=3):
     # how far each phrase stands out
     z_scores = ((scores - scores.mean()) / scores.std()).tolist()
     ranked = sorted(zip(PHRASES, z_scores), key=lambda pair: -pair[1])
-    return [{"clue": f"looks like {phrase}", "score": round(z, 2)} for phrase, z in ranked[:top] if z > 1.5]
+    return [{"clue": f"looks like {phrase}", "score": round(z, 2)} for phrase, z in ranked[:3] if z > 1.5]
 
 
 # log odds the photo is within 100 km of the top guess
@@ -125,9 +143,11 @@ def heatmap(image, grid=7):
     cell = 224 // grid
     with torch.no_grad():
         logits = geo.view_logits(view)
-        near = geo.gallery_distances_km(*geo.gallery[logits[0].argmax()].tolist()) < 100
+        lat, lon = geo.gallery[logits[0].argmax()].tolist()
+        near = geo.gallery_distances_km(lat, lon) < 100
         before = near_odds(logits, near)
-        blurry = F.interpolate(F.interpolate(view, size=16, mode="area"), size=224, mode="bilinear")
+        # blur by shrinking to 16x16 and back
+        blurry =F.interpolate(F.interpolate(view, size=16, mode="area"), size=224, mode="bilinear")
         # one copy per patch, with that patch blurred
         batch = view.repeat(grid * grid, 1, 1, 1)
         for row in range(grid):
@@ -139,15 +159,12 @@ def heatmap(image, grid=7):
     return [[round(drop, 3) for drop in row] for row in drops.tolist()]
 
 
-HEAT_SCALE = 1.0
-
-
 def overlay(image, heat):
     width, height = image.size
     side = min(width, height)
     left, top = (width - side) // 2, (height - side) // 2
-    # fixed scale, so weak maps stay faint
-    strength = np.clip(np.array(heat, dtype=np.float32) / HEAT_SCALE, 0, 1)
+    # no rescaling, so weak maps stay faint
+    strength = np.clip(np.array(heat, dtype=np.float32), 0, 1)
     strength = np.clip(np.asarray(Image.fromarray(strength).resize((side, side), Image.BICUBIC)), 0, 1)
     # dim the strips GeoCLIP never sees
     pixels = np.asarray(image, dtype=np.float32) * 0.4

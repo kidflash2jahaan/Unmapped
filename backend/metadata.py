@@ -26,19 +26,16 @@ def clean_text(value):
 
 def read_metadata(file):
     exif = Image.open(file).getexif()
-    gps = exif.get_ifd(ExifTags.IFD.GPSInfo)
     tags = {ExifTags.TAGS.get(key, key): value for key, value in exif.items()}
     tags.update({ExifTags.TAGS.get(key, key): value for key, value in exif.get_ifd(ExifTags.IFD.Exif).items()})
-    tags.update({ExifTags.GPSTAGS.get(key, key): value for key, value in gps.items()})
+    tags.update({ExifTags.GPSTAGS.get(key, key): value for key, value in exif.get_ifd(ExifTags.IFD.GPSInfo).items()})
     location = None
     if "GPSLatitude" in tags and "GPSLongitude" in tags:
-        location = {
-            "lat": round(to_degrees(tags["GPSLatitude"], tags.get("GPSLatitudeRef")), 2),
-            "lon": round(to_degrees(tags["GPSLongitude"], tags.get("GPSLongitudeRef")), 2),
-        }
-    # broken GPS values like 37/0
-    if location and not all(math.isfinite(value) for value in location.values()):
-        location = None
+        lat = to_degrees(tags["GPSLatitude"], tags.get("GPSLatitudeRef"))
+        lon = to_degrees(tags["GPSLongitude"], tags.get("GPSLongitudeRef"))
+        # broken GPS values like 37/0
+        if math.isfinite(lat) and math.isfinite(lon):
+            location = {"lat": round(lat, 2), "lon": round(lon, 2)}
     camera = " ".join(clean_text(tags[name]) for name in ("Make", "Model") if name in tags) or None
     taken = tags.get("DateTimeOriginal") or tags.get("DateTime")
     other = [name for name in IDENTIFYING if name in tags]

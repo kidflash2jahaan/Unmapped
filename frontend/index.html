@@ -151,12 +151,13 @@
   <template id="tpl-protected">
     <section class="split">
       <div class="left">
-        <div class="shot wipe" id="wipe" tabindex="0" role="slider" aria-label="Compare the original and protected photo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50% protected photo shown">
+        <div class="shot wipe" id="wipe">
           <img id="before" alt="Original photo">
           <div class="layer"><img id="after" alt="Protected photo"></div>
           <div id="zooms"></div>
           <div class="seam"><div class="handle"><svg width="30" height="18" viewBox="0 0 30 18" aria-hidden="true"><path d="M9 2 2 9l7 7M21 2l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4"/></svg></div></div>
           <span class="side l">Before</span><span class="side r">After</span>
+          <input type="range" id="wipe-range" min="2" max="98" value="50" aria-label="Compare photos: left of the line is the original, right is protected">
         </div>
         <p class="credit" id="credit"></p>
       </div>
@@ -234,7 +235,7 @@
 
   <!-- map parts -->
   <template id="tpl-map">
-    <svg class="world" role="img"></svg>
+    <svg class="world" role="img" aria-label="Map with the guessed area shown as a circle, not a pin"></svg>
     <div class="map-cap"></div>
   </template>
 
