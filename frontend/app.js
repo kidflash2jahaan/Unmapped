@@ -193,6 +193,9 @@ function clueList(attack) {
   ];
 }
 
+// skip OCR junk with under 3 letters
+function readable(clue) { return clue.kind === "face" || (clue.label.match(/[a-z]/gi) || []).length >= 3; }
+
 // boxes as % of the photo
 function boxStyle(box, attack) {
   const [left, top, right, bottom] = box;
@@ -208,7 +211,8 @@ function clueMarks(attack) {
   const shot = document.getElementById("shot");
   const [w, h, size] = [shot.clientWidth, shot.clientHeight, 34];
   const taken = clues.map(({ box }) => [box[0] * w / attack.width, box[1] * h / attack.height, box[2] * w / attack.width, box[3] * h / attack.height]);
-  const tags = taken.slice(0, 3).map(([left, top, right, bottom], index) => {
+  const tagged = taken.filter((box, index) => readable(clues[index])).slice(0, 3);
+  const tags = tagged.map(([left, top, right, bottom], index) => {
     const [cx, cy] = [(left + right - size) / 2, (top + bottom - size) / 2];
     // try each side, near then far
     const spots = [12, 44].flatMap((gap) => [["top", cx, top - gap - size, gap], ["bottom", cx, bottom + gap, gap], ["left", left - gap - size, cy, gap], ["right", right + gap, cy, gap]]);
@@ -258,7 +262,7 @@ function gpsDetails(meta, place) {
 
 // list the top clues
 function findingsList(attack) {
-  const clues = clueList(attack);
+  const clues = clueList(attack).filter(readable);
   const items = clues.slice(0, 3).map((clue, index) => `<li><b class="n">${index + 1}</b>
     ${clue.kind === "text" ? `<span class="words">${esc(clue.label.slice(0, 26))}</span>` : "<span>A face</span>"}</li>`);
   if (clues.length > 3) items.push(`<li><b class="n more">+</b><span>${plural(clues.length - 3, "more clue")} boxed</span></li>`);
@@ -698,13 +702,19 @@ function pathOf(projection) {
 // circle shape around a point
 function circle(point, radiusKm) { return d3.geoCircle().center([point.lon, point.lat]).radius(radiusKm / 111.2)(); }
 
-// distance rings around the guess
-function distanceRings(path, projection, area, pxPerKm, maxKm, avoid) {
+// which distance rings to draw, in km
+function keptRings(area, pxPerKm, maxKm) {
   const kept = [];
   [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].forEach((ring) => {
     const last = kept[kept.length - 1] || area.radius_km;
     if (ring >= area.radius_km * 2 && ring <= maxKm && (ring - last) * pxPerKm >= 46 && kept.length < 3) kept.push(ring);
   });
+  return kept;
+}
+
+// distance rings around the guess
+function distanceRings(path, projection, area, pxPerKm, maxKm, avoid) {
+  const kept = keptRings(area, pxPerKm, maxKm);
   // label on a diagonal with no pill nearby
   return kept.map((ring) => {
     const spots = [-135, -45, 135, 45].map((degrees) => {
@@ -738,6 +748,28 @@ function sideTag([x, y], gap, anchor, [width, height], title, detail, cls = "") 
   return placeTag(x + (anchor === "end" ? -gap : gap), Math.min(Math.max(y - 4, 40), height - 44), anchor, title, detail, cls);
 }
 
+// move the place tag to the first spot off every ring and pill
+async function nudgeTag(svg, map, moves, avoid = []) {
+  const tag = svg.querySelector(".place-tag");
+  if (!tag) return;
+  // layout first so fonts start loading
+  tag.getBBox();
+  await document.fonts.ready;
+  const box = tag.getBBox();
+  const [cx, cy] = map.center;
+  const clear = ([dx, dy]) => {
+    const [x0, x1, y0, y1] = [box.x + dx - 14, box.x + box.width + dx + 14, box.y + dy - 8, box.y + box.height + dy + 8];
+    if (x0 < 0 || y0 < 0 || x1 > map.width || y1 > map.height) return false;
+    // rect vs ring: nearest and farthest corner
+    const near = Math.hypot(Math.max(x0 - cx, 0, cx - x1), Math.max(y0 - cy, 0, cy - y1));
+    const far = Math.hypot(Math.max(cx - x0, x1 - cx), Math.max(cy - y0, y1 - cy));
+    const offPills = avoid.every(([px, py]) => Math.hypot(Math.max(x0 - px, 0, px - x1), Math.max(y0 - py, 0, py - y1)) > 36);
+    return offPills && map.rings.every((ring) => ring < near || ring > far);
+  };
+  const [dx, dy] = moves.find(clear) || [0, 0];
+  tag.setAttribute("transform", `translate(${dx} ${dy})`);
+}
+
 // draw the guess circle
 function guessCircle(path, area) {
   const d = path(circle(area, area.radius_km));
@@ -755,6 +787,7 @@ function chart(svg, area, halfKm, at, ripples, avoid = []) {
   svg.setAttribute("viewBox", `0 0 ${width} ${svg.clientHeight}`);
   return {
     width, height, pxPerKm, projection, center: projection([area.lon, area.lat]),
+    rings: [area.radius_km, ...keptRings(area, pxPerKm, halfKm * 0.9)].map((ring) => ring * pxPerKm),
     open: `<clipPath id="neat"><rect width="${width}" height="${height}"/></clipPath>
       <g clip-path="url(#neat)"><rect class="sea" width="${width}" height="${height}"/>${grid.lines}${geoLayers(path, halfKm, ripples)}
       ${distanceRings(path, projection, area, pxPerKm, halfKm * 0.9, avoid.map((point) => projection(point)))}${guessCircle(path, area)}`,
@@ -780,6 +813,7 @@ async function showAttackMap(attack, gps) {
   html += loupe ? sideTag(map.center, 30, "start", [map.width, map.height], name, detail) : placeTag(cx, cy + area.radius_km * map.pxPerKm + 44, "middle", name, detail);
   if (loupe) html += drawLoupe(area, gps, map.pxPerKm, map.center, [214, map.height - 214]);
   svg.innerHTML = html;
+  if (!loupe) nudgeTag(svg, map, d3.range(0, 160, 4).flatMap((step) => [[0, -step], [0, step]]));
 }
 
 // zoomed inset for a tiny circle
@@ -848,7 +882,7 @@ async function showProfileMap(profile) {
   if (!svg) return;
   const area = profile.combined;
   const guesses = profile.photos.map((photo) => [photo.location.lon, photo.location.lat]);
-  const map = chart(svg, area, Math.max(area.radius_km * 4, 220), [0.6, 0.62], [20, 12, 5], guesses);
+  const map = chart(svg, area, Math.max(area.radius_km * 4, 220), [0.75, 0.6], [20, 12, 5], guesses);
   // nearby pills share one label
   const pills = [];
   let offMap = 0;
@@ -867,6 +901,7 @@ async function showProfileMap(profile) {
   const name = regionName([area.lon, area.lat], area.radius_km).split(",")[0];
   const tag = sideTag(map.center, area.radius_km * map.pxPerKm + 18, "start", [map.width, map.height], name, `all together, within about ${km(area.radius_km)} km`);
   svg.innerHTML = map.open + pillHtml + tag + map.close;
+  nudgeTag(svg, map, d3.range(0, 400, 6).flatMap((step) => [0, 30, -30].map((dy) => [-step, dy])), pills.map((pill) => [pill.x, pill.y]));
   svg.insertAdjacentHTML("afterend", `<p class="map-note">Pills: each photo's own guess.${offMap ? ` ${offMap} more ${offMap === 1 ? "is" : "are"} off this map.` : ""}</p>`);
 }
 
