@@ -24,6 +24,7 @@ PROMPT = (
 )
 
 
+# the answer shape we want back
 class Guess(BaseModel):
     place: str
     lat: float
@@ -32,6 +33,7 @@ class Guess(BaseModel):
     clues: list[str]
 
 
+# ask Claude where the photo was taken
 def ask_claude(image):
     copy = image.convert("RGB")
     copy.thumbnail((1568, 1568))

@@ -35,7 +35,7 @@ clues.heatmap(Image.new("RGB", (224, 224)))
 LOCATION_PENALTY = [(1, 30), (5, 25), (25, 20), (100, 12), (500, 5)]
 
 
-# 100 = private
+# 0 to 100, 100 = private
 def privacy_score(has_gps, location_km, texts=0, faces=0, flags=0, cloaked=False):
     score = 100
     if has_gps:
@@ -52,6 +52,7 @@ def privacy_score(has_gps, location_km, texts=0, faces=0, flags=0, cloaked=False
     return max(score, 0)
 
 
+# km between the truth and a guess
 def error_km(truth, location):
     return round(geo.distance_km(truth["lat"], truth["lon"], location["lat"], location["lon"]), 1)
 
@@ -61,18 +62,21 @@ def reach_km(truth, location):
     return max(location["radius_km"], error_km(truth, location))
 
 
+# image to base64 PNG text
 def png_base64(image):
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
 
+# send an image as a JPEG
 def jpeg_response(image):
     buffer = io.BytesIO()
     image.save(buffer, "JPEG", quality=90)
     return Response(buffer.getvalue(), media_type="image/jpeg")
 
 
+# read and check an upload
 def read_upload(upload):
     data = upload.file.read()
     try:
@@ -84,12 +88,14 @@ def read_upload(upload):
     return info, image
 
 
+# look up a stored photo
 def find_photo(photo_id):
     if photo_id not in photos:
         raise HTTPException(404, "Unknown photo id, run /attack first")
     return photos[photo_id]
 
 
+# run every attack on one photo
 def attack(image, info, truth=None):
     start = time.time()
     with gpu:
@@ -126,23 +132,27 @@ def attack(image, info, truth=None):
     return result
 
 
+# attack an uploaded photo
 @app.post("/attack")
 def attack_upload(image: UploadFile = File(...)):
     info, picture = read_upload(image)
     return attack(picture, info)
 
 
+# list the demo photos
 @app.get("/examples")
 def list_examples():
     return [{key: value for key, value in example.items() if key != "path"} for example in EXAMPLES.values()]
 
 
+# look up a demo photo
 def find_example(example_id):
     if example_id not in EXAMPLES:
         raise HTTPException(404, "Unknown example")
     return EXAMPLES[example_id]
 
 
+# send a demo photo
 @app.get("/example_image/{example_id}.jpg")
 def example_image(example_id: str):
     picture = metadata.load_image(ROOT / find_example(example_id)["path"])
@@ -150,6 +160,7 @@ def example_image(example_id: str):
     return jpeg_response(picture)
 
 
+# attack a demo photo
 @app.post("/attack_example/{example_id}")
 def attack_example(example_id: str):
     example = find_example(example_id)
@@ -161,11 +172,13 @@ def attack_example(example_id: str):
     return result
 
 
+# send a stored photo
 @app.get("/photo/{photo_id}.jpg")
 def photo_image(photo_id: str):
     return jpeg_response(find_photo(photo_id)["image"])
 
 
+# blur, cloak, save clean, attack again
 @app.post("/protect")
 def protect(
     photo_id: str = Form(..., alias="id"),
@@ -225,6 +238,7 @@ def protect(
     }
 
 
+# download the protected photo
 @app.get("/protected/{photo_id}.jpg")
 def protected_image(photo_id: str):
     saved = find_photo(photo_id)
@@ -234,12 +248,13 @@ def protected_image(photo_id: str):
     return Response(saved["protected"], media_type="image/jpeg", headers=headers)
 
 
+# is the Claude check turned on?
 @app.get("/config")
 def config():
     return {"claude": claude_check.enabled}
 
 
-# opt-in: sends the photo to Anthropic
+# opt-in: ask Claude, sends the photo to Anthropic
 @app.post("/claude_check")
 def claude_check_photo(photo_id: str = Form(..., alias="id"), which: str = Form("original")):
     saved = find_photo(photo_id)
@@ -259,6 +274,7 @@ def claude_check_photo(photo_id: str = Form(..., alias="id"), which: str = Form(
     return guess
 
 
+# combine photos and captions
 def build_profile(names, infos, images, captions, truth=None):
     start = time.time()
     with gpu:
@@ -278,6 +294,7 @@ def build_profile(names, infos, images, captions, truth=None):
     }
 
 
+# profile from uploaded photos
 @app.post("/profile")
 def profile_upload(images: list[UploadFile] = File(...), captions: list[str] = Form([])):
     uploads = [read_upload(upload) for upload in images]
@@ -285,6 +302,7 @@ def profile_upload(images: list[UploadFile] = File(...), captions: list[str] = F
     return build_profile(names, [info for info, _ in uploads], [picture for _, picture in uploads], captions)
 
 
+# profile from the demo feed
 @app.post("/profile_example")
 def profile_example():
     examples = [example for example in EXAMPLES.values() if example["mode"] == "profile"]

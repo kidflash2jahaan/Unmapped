@@ -11,6 +11,7 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import geo
 
 
+# GeoCLIP's top-guess error in km
 def error_km(image, info):
     guess = geo.predict(image, top_k=1)[0]
     return geo.distance_km(info["lat"], info["lon"], guess["lat"], guess["lon"])
@@ -25,11 +26,13 @@ def share(image):
     return Image.open(buffer).convert("RGB")
 
 
+# crop 10% off, then share
 def crop_and_share(image):
     width, height = image.size
     return share(image.crop((width // 10, height // 10, width, height)))
 
 
+# cloak each photo and measure it
 def run(manifest_path, output_dir, budget):
     photos = json.load(open(manifest_path))
     output = Path(output_dir)

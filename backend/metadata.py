@@ -13,6 +13,7 @@ IDENTIFYING = [
 ]
 
 
+# GPS degrees, minutes, seconds to decimal
 def to_degrees(values, ref):
     degrees, minutes, seconds = (float(value) for value in values)
     sign = -1 if ref in ("S", "W") else 1
@@ -24,6 +25,7 @@ def clean_text(value):
     return str(value).split("\x00")[0].strip()
 
 
+# read GPS, camera and time
 def read_metadata(file):
     exif = Image.open(file).getexif()
     tags = {ExifTags.TAGS.get(key, key): value for key, value in exif.items()}
@@ -42,6 +44,7 @@ def read_metadata(file):
     return {"gps": location, "camera": camera, "taken": clean_text(taken) if taken else None, "other": other}
 
 
+# open a photo the right way up
 def load_image(file):
     image = ImageOps.exif_transpose(Image.open(file))
     # phone colors (like Display P3) to standard sRGB
@@ -53,6 +56,7 @@ def load_image(file):
     return image
 
 
+# save pixels only, no metadata
 def clean_save(image, file):
     # fresh copy carries no metadata
     fresh = Image.new("RGB", image.size)
@@ -60,6 +64,7 @@ def clean_save(image, file):
     fresh.save(file, "JPEG", quality=95)
 
 
+# check a saved file for metadata
 def has_metadata(file):
     image = Image.open(file)
     return len(image.getexif()) > 0 or "xmp" in image.info

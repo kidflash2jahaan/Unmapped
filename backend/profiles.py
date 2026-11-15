@@ -17,6 +17,7 @@ FLAGS = {
 NAMED_PLACE = r"\b(?:at|in) ([A-Z][a-z]+(?: [A-Z][a-z]+)*)"
 
 
+# flag risky phrases in captions
 def scan_captions(captions):
     results = []
     for caption in captions:
@@ -30,7 +31,7 @@ def scan_captions(captions):
     return results
 
 
-# adding log-probabilities = multiplying the photos' guesses
+# combine every photo's guess
 def combine(images):
     total = 0
     photos = []

@@ -22,11 +22,13 @@ CLIP_MEAN = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=device).vie
 CLIP_STD = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=device).view(1, 3, 1, 1)
 
 
+# image to tensor
 def to_pixels(image):
     array = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
     return torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0).to(device)
 
 
+# tensor to image
 def to_image(pixels):
     array = pixels.squeeze(0).permute(1, 2, 0).clamp(0, 1).cpu().numpy()
     return Image.fromarray(np.round(array * 255).astype(np.uint8))
@@ -44,20 +46,24 @@ def model_view(pixels):
     return (square - CLIP_MEAN) / CLIP_STD
 
 
+# score the view against all 100K places
 def view_logits(view):
     features = F.normalize(model.image_encoder(view), dim=1)
     return model.logit_scale.exp() * features @ gallery_features.T
 
 
+# score a full-size photo
 def location_logits(pixels):
     return view_logits(model_view(pixels))
 
 
+# chance for each of the 100K places
 def probabilities(image):
     with torch.no_grad():
         return location_logits(to_pixels(image)).softmax(dim=-1)[0]
 
 
+# top 5 guesses
 def predict(image, top_k=5):
     probs = probabilities(image)
     values, indices = probs.topk(top_k)
@@ -68,7 +74,7 @@ def predict(image, top_k=5):
 RADIUS_STEPS_KM = [1, 5, 25, 100, 500, 2500]
 
 
-# top guess plus a coarse radius, never under 1 km
+# top guess plus a radius, never under 1 km
 def summarize(probs):
     lat, lon = gallery[probs.argmax()].tolist()
     distances = gallery_distances_km(lat, lon)
@@ -85,6 +91,7 @@ def summarize(probs):
     return {"lat": round(lat, 2), "lon": round(lon, 2), "radius_km": radius, "top": top}
 
 
+# GeoCLIP's guess for a photo
 def locate(image):
     return summarize(probabilities(image))
 
@@ -96,6 +103,7 @@ def distance_km(lat1, lon1, lat2, lon2):
     return 6371 * 2 * math.asin(math.sqrt(a))
 
 
+# distance to all 100K places
 def gallery_distances_km(lat, lon):
     lats, lons = torch.deg2rad(gallery[:, 0]), torch.deg2rad(gallery[:, 1])
     lat, lon = math.radians(lat), math.radians(lon)
@@ -113,7 +121,7 @@ def random_crop(pixels):
     return pixels[:, :, top:top + crop_height, left:left + crop_width]
 
 
-# smaller budget in smooth areas like sky, where changes show
+# smaller budget in smooth areas like sky
 def texture_budget(pixels, budget):
     gray = pixels.mean(dim=1, keepdim=True)
     detail = (gray - F.avg_pool2d(gray, kernel_size=9, stride=1, padding=4)).abs()
@@ -121,6 +129,7 @@ def texture_budget(pixels, budget):
     return budget * (detail / 0.02).clamp(0.25, 1)
 
 
+# push GeoCLIP's guess far away
 def cloak(image, lat, lon, budget=4 / 255, steps=100):
     step_size = budget / 8
     pixels = to_pixels(image)

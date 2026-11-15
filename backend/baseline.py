@@ -6,6 +6,7 @@ from PIL import Image
 import geo
 
 
+# GeoCLIP's error on every test photo
 def run(manifest_path, output_path):
     photos = json.load(open(manifest_path))
     results = {}

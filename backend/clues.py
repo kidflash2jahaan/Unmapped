@@ -10,7 +10,7 @@ from transformers import AutoTokenizer
 import geo
 
 
-# whole photo plus a 3x3 grid of overlapping half-size tiles
+# whole photo plus 9 overlapping tiles
 def tiles(image):
     width, height = image.size
     boxes = [(0, 0, width, height)]
@@ -20,7 +20,7 @@ def tiles(image):
     return boxes
 
 
-# Vision boxes go 0 to 1 from the bottom left
+# Vision box to image pixels
 def to_image_box(box, tile):
     x, y, w, h = box
     left, top, right, bottom = tile
@@ -33,6 +33,7 @@ def to_image_box(box, tile):
     ]
 
 
+# how much two boxes overlap
 def overlap(a, b):
     width = max(0, min(a[2], b[2]) - max(a[0], b[0]))
     height = max(0, min(a[3], b[3]) - max(a[1], b[1]))
@@ -40,7 +41,7 @@ def overlap(a, b):
     return width * height / max(smaller, 1)
 
 
-# keep the most confident of overlapping boxes
+# keep the best of overlapping boxes
 def merge(found):
     kept = []
     for item in sorted(found, key=lambda item: (item["confidence"], len(item.get("text", ""))), reverse=True):
@@ -49,7 +50,7 @@ def merge(found):
     return kept
 
 
-# join pieces of the same sign into one clue
+# join pieces of the same sign
 def group_signs(items):
     groups = []
     for item in sorted(items, key=lambda item: item["box"][1]):
@@ -67,6 +68,7 @@ def group_signs(items):
     return groups
 
 
+# read text with Apple's OCR
 def find_text(image):
     found = []
     # free Apple Vision memory after each call
@@ -78,6 +80,7 @@ def find_text(image):
     return group_signs(merge(found))
 
 
+# find faces with Apple Vision
 def find_faces(image):
     found = []
     with objc.autorelease_pool():
@@ -114,6 +117,7 @@ with torch.no_grad():
     phrase_features = torch.stack(phrase_features)
 
 
+# fit the whole photo in a square
 def padded(image):
     side = max(image.size)
     square = Image.new("RGB", (side, side), (124, 116, 104))
@@ -121,6 +125,7 @@ def padded(image):
     return square
 
 
+# scenery that stands out, like palm trees
 def ambient_clues(image):
     with torch.no_grad():
         # center crop and whole photo
@@ -133,11 +138,12 @@ def ambient_clues(image):
     return [{"clue": f"looks like {phrase}", "score": round(z, 2)} for phrase, z in ranked[:3] if z > 1.5]
 
 
-# log odds the photo is within 100 km of the top guess
+# odds the guess is within 100 km
 def near_odds(logits, near):
     return torch.logsumexp(logits[:, near], dim=1) - torch.logsumexp(logits[:, ~near], dim=1)
 
 
+# blur each patch, see what mattered
 def heatmap(image, grid=7):
     view = geo.model_view(geo.to_pixels(image))
     cell = 224 // grid
@@ -159,6 +165,7 @@ def heatmap(image, grid=7):
     return [[round(drop, 3) for drop in row] for row in drops.tolist()]
 
 
+# draw the heatmap on the photo
 def overlay(image, heat):
     width, height = image.size
     side = min(width, height)
@@ -174,6 +181,7 @@ def overlay(image, heat):
     return Image.fromarray(pixels.astype(np.uint8))
 
 
+# blur the given boxes
 def hide(image, boxes):
     result = image.copy()
     for left, top, right, bottom in boxes:
