@@ -272,7 +272,9 @@ button.tool:hover { color: #fff; }
 .cl .sl { margin-right: 4px; }
 
 /* compare slider */
-.compare { cursor: ew-resize; touch-action: none; --x: 50%; }
+.compare { cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; --x: 50%; }
+.compare img, .compare .marks, .compare .knob { pointer-events: none; -webkit-user-drag: none; }
+.protected .photo-panel { cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; }
 .after { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--x)) 0 0); }
 .handle { position: absolute; top: 0; bottom: 0; left: var(--x); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
 .handle:focus-visible { outline: none; }

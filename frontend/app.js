@@ -547,9 +547,17 @@ function setSplit(percent) {
 // drag on the photo to compare
 function hookCompare() {
   const shot = document.getElementById("shot");
-  const move = (event) => setSplit((event.offsetX / shot.clientWidth) * 100);
-  shot.addEventListener("pointerdown", (event) => { shot.setPointerCapture(event.pointerId); move(event); });
-  shot.addEventListener("pointermove", (event) => { if (shot.hasPointerCapture(event.pointerId)) move(event); });
+  // pointer x as a percent of the photo
+  const move = (event) => {
+    const box = shot.getBoundingClientRect();
+    setSplit(((event.clientX - box.left) / box.width) * 100);
+  };
+  // whole panel is the drag area
+  const panel = shot.parentElement;
+  // stop the browser dragging the image itself
+  panel.addEventListener("dragstart", (event) => event.preventDefault());
+  panel.addEventListener("pointerdown", (event) => { event.preventDefault(); panel.setPointerCapture(event.pointerId); move(event); });
+  panel.addEventListener("pointermove", (event) => { if (panel.hasPointerCapture(event.pointerId)) move(event); });
   setSplit(50);
 }
 
