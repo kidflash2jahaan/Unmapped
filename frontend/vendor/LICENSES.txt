@@ -15,7 +15,11 @@ counties-10m.json      us-atlas 3.0.1         ISC (data: US Census Bureau cartog
 
 ISC License: permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided the copyright notice and this permission notice appear in all copies. Provided "as is" without warranty.
 
-fonts/geist-latin.woff2       Geist (variable, Latin subset)       SIL Open Font License 1.1, (c) Vercel
-fonts/geist-mono-latin.woff2  Geist Mono (variable, Latin subset)  SIL Open Font License 1.1, (c) Vercel
-  Copied from the Next.js package (next/dist/next-devtools/server/font), no network fetch.
+fonts/newsreader-latin.woff2                  Newsreader (variable opsz + wght, Latin)  SIL Open Font License 1.1, (c) The Newsreader Project Authors (Production Type)
+fonts/newsreader-italic-latin.woff2           Newsreader Italic (variable, Latin)       SIL Open Font License 1.1, (c) The Newsreader Project Authors (Production Type)
+fonts/ibm-plex-sans-latin.woff2               IBM Plex Sans (variable wght, Latin)      SIL Open Font License 1.1, (c) IBM Corp.
+fonts/ibm-plex-sans-condensed-400-latin.woff2 IBM Plex Sans Condensed 400 (Latin)       SIL Open Font License 1.1, (c) IBM Corp.
+fonts/ibm-plex-sans-condensed-500-latin.woff2 IBM Plex Sans Condensed 500 (Latin)       SIL Open Font License 1.1, (c) IBM Corp.
+fonts/ibm-plex-sans-condensed-600-latin.woff2 IBM Plex Sans Condensed 600 (Latin)       SIL Open Font License 1.1, (c) IBM Corp.
+  Fetched 2026-11-14 from the Google Fonts CSS2 API (fonts.gstatic.com), latin subset only.
   OFL text: https://openfontlicense.org
