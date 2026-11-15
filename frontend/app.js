@@ -17,27 +17,40 @@ let geo = null;
 // small helpers
 function esc(text) { return String(text).replace(/[&<>"']/g, (char) => "&#" + char.charCodeAt(0) + ";"); }
 
+// format a distance in km
 function km(value) {
   if (value < 10) return value.toFixed(1).replace(/\.0$/, "");
   return Math.round(value).toLocaleString("en-US");
 }
 
+// add an s when count isn't 1
 function plural(count, word) { return count + " " + word + (count === 1 ? "" : "s"); }
+// middle value of a list
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// clue without the looks-like prefix
 function clueText(clue) { return clue.clue.replace(/^looks like (a |an )?/i, ""); }
+// is this an iPhone HEIC file
 function isHeic(name) { return /\.(heic|heif)$/i.test(name); }
+// is this file an image
 function isImage(file) { return /^image\//.test(file.type) || isHeic(file.name); }
+// url of an uploaded photo
 function photoUrl(id) { return "photo/" + encodeURIComponent(id) + ".jpg"; }
+// url of an example photo
 function exampleUrl(id) { return "example_image/" + encodeURIComponent(id) + ".jpg"; }
+// put html into an element
 function fill(id, html) { document.getElementById(id).innerHTML = html; }
+// set the screen reader text
 function say(text) { document.getElementById("say").textContent = text; }
+// km between two points
 function distanceKm(a, b) { return d3.geoDistance([a.lon, a.lat], [b.lon, b.lat]) * 6371; }
+// km number with a small unit
 function kmNum(value, prefix = "") { return `${prefix}${km(value)}<span class="u">km</span>`; }
+// examples for the profile feed
 function feedExamples() { return state.examples.filter((example) => example.mode === "profile"); }
 
 // server calls
@@ -49,12 +62,14 @@ async function getJson(path, options) {
   throw new Error(typeof body.detail === "string" ? body.detail : "The server returned error " + response.status + ".");
 }
 
+// send a form to the server
 function postForm(path, fields) {
   const form = new FormData();
   Object.entries(fields).forEach(([key, value]) => form.append(key, value));
   return getJson(path, { method: "POST", body: form });
 }
 
+// switch light or dark
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   document.getElementById("theme").setAttribute("aria-label", "Switch to " + (theme === "dark" ? "light" : "dark") + " theme");
@@ -112,6 +127,7 @@ function renderStart() {
   showExamples();
 }
 
+// list the example photos
 function showExamples() {
   const box = document.getElementById("examples");
   if (!box) return;
@@ -137,27 +153,31 @@ function renderWait(title, detail, left, plan, tab) {
   timer = setInterval(() => fill("elapsed", Math.floor((Date.now() - start) / 1000) + "<small>s</small>"), 250);
 }
 
+// photo with a scan line
 function preview(src, alt) { return `<figure class="preview"><img src="${src}" alt="${esc(alt)}"><span class="scan" aria-hidden="true"></span></figure>`; }
 
+// draw the error screen
 function renderError(message) {
   show("tpl-error", null);
   fill("error-text", esc(message));
   document.getElementById("back").addEventListener("click", renderStart);
 }
 
-// attack
+// send the photo and show results
 function runAttack(request, left) {
   const plan = ["Read the file's metadata", "GeoCLIP guesses the location from pixels", "Find readable text and faces", "Map what gave it away"];
   renderWait("Attacking this photo", "An open AI model and two detectors scan the pixels. This takes a few seconds.", left, plan, "attack");
   return request.then((result) => { state.attack = result; state.protect = null; renderAttack(); }).catch((error) => renderError(error.message));
 }
 
+// attack an example photo
 function runExample(id) {
   state.example = state.examples.find((example) => example.id === id) || null;
   const title = state.example ? state.example.title : "Example photo";
   return runAttack(postForm("attack_example/" + encodeURIComponent(id), {}), preview(exampleUrl(id), title));
 }
 
+// attack an uploaded photo
 function runUpload(file) {
   state.example = null;
   if (!file || !isImage(file)) return renderError("That file isn't a photo. Choose a JPEG, PNG or HEIC image.");
@@ -179,6 +199,7 @@ function boxStyle(box, attack) {
   return `left:${(left / attack.width) * 100}%;top:${(top / attack.height) * 100}%;width:${((right - left) / attack.width) * 100}%;height:${((bottom - top) / attack.height) * 100}%`;
 }
 
+// do two boxes overlap
 function overlaps(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
 
 // numbered tags beside the first 3 boxes
@@ -220,8 +241,10 @@ function heatRings(attack) {
   }).join("");
 }
 
+// alt text for the photo
 function photoAlt() { return state.example ? "Example photo: " + state.example.title : "Your uploaded photo"; }
 
+// gps facts as small labels
 function gpsDetails(meta, place) {
   const gps = meta.gps;
   const details = [
@@ -233,6 +256,7 @@ function gpsDetails(meta, place) {
   return details.map((item) => `<span>${esc(item)}</span>`).join("");
 }
 
+// list the top clues
 function findingsList(attack) {
   const clues = clueList(attack);
   const items = clues.slice(0, 3).map((clue, index) => `<li><b class="n">${index + 1}</b>
@@ -244,6 +268,7 @@ function findingsList(attack) {
   return `<ol class="clues">${items.join("")}</ol>`;
 }
 
+// headline for the attack result
 function attackHeadline(reach, gps) {
   if (gps) return "Your photo's file says exactly where you took it.";
   if (reach < 30) return "An open AI model worked out where you took this photo.";
@@ -311,7 +336,7 @@ function toggleHeat() {
   document.getElementById("heat-note").hidden = !on && !rings.innerHTML;
 }
 
-// protect
+// send the photo to be protected
 function protectPhoto() {
   const attack = state.attack;
   const options = {
@@ -335,6 +360,7 @@ function protectPhoto() {
     .catch((error) => renderError(error.message));
 }
 
+// list what protect changed
 function checklist(attack, protect, options) {
   const items = [protect.after.metadata_found
     ? ["warn", "Metadata still found", "in the saved file"]
@@ -346,6 +372,7 @@ function checklist(attack, protect, options) {
   return items.map(([kind, title, detail]) => `<li class="${kind}"><b>${esc(title)}</b><span>${esc(detail)}</span></li>`).join("");
 }
 
+// plain note on what protect can't fix
 function honestText(attack, options, moved) {
   const leftovers = attack.ambient.map(clueText).join(", ") || "the buildings and scenery the rings marked";
   let cloak = "";
@@ -391,6 +418,7 @@ function renderProtected() {
   showFlightMap(before, after, moved);
 }
 
+// one column of Claude's answer
 function claudeColumn(label, answer) {
   if (answer.refused) return `<div class="cl-col"><p class="eyebrow">${label}</p><p class="cl-place">Claude declined to guess</p></div>`;
   const number = answer.error_km != null ? `<p class="cl-num">${kmNum(answer.error_km)}<span class="off">off</span></p>` : "";
@@ -438,8 +466,10 @@ function renderFeed() {
   });
 }
 
+// small preview of a post
 function thumb(post) { return isHeic(post.name) ? `<span class="heic">HEIC</span>` : `<img src="${post.url}" alt="">`; }
 
+// one row of the feed
 function postRow(post, index) {
   return `<li class="post">
     ${thumb(post)}
@@ -451,6 +481,7 @@ function postRow(post, index) {
   </li>`;
 }
 
+// add files to the feed
 function addFeedFiles(files) {
   files.filter(isImage).forEach((file) => {
     if (state.feed.length < 10) state.feed.push({ file, name: file.name, caption: "", url: URL.createObjectURL(file) });
@@ -458,7 +489,7 @@ function addFeedFiles(files) {
   renderFeed();
 }
 
-// example feed
+// fill the feed with examples
 function loadExampleFeed() {
   const picks = feedExamples();
   if (!picks.length) return renderError(state.examplesError || "The server has no example feed.");
@@ -466,6 +497,7 @@ function loadExampleFeed() {
   return attackFeed(getJson("profile_example", { method: "POST" }));
 }
 
+// send the feed to the server
 function runProfile() {
   // one image and caption per photo
   const form = new FormData();
@@ -477,6 +509,7 @@ function runProfile() {
   return attackFeed(getJson("profile", { method: "POST", body: form }));
 }
 
+// show the profile result
 function attackFeed(request) {
   const left = `<div class="thumbs">${state.posts.map(thumb).join("")}</div>`;
   const plan = ["GeoCLIP guesses each photo on its own", "Multiply the guesses together", "Scan captions for school, team, home and routine"];
@@ -484,6 +517,7 @@ function attackFeed(request) {
   return request.then((result) => { state.profile = result; renderProfile(); }).catch((error) => renderError(error.message));
 }
 
+// mark flagged words in a caption
 function highlight(caption, flags) {
   let html = esc(caption);
   new Set(flags.map((flag) => esc(flag.match))).forEach((word) => (html = html.split(word).join(`<mark>${word}</mark>`)));
@@ -579,6 +613,7 @@ async function loadGeo() {
   };
 }
 
+// name the region of a point
 function regionName(point, radius) {
   if (!geo) return "this area";
   const inside = (features) => features.find((feature) => d3.geoContains(feature, point));
@@ -629,6 +664,7 @@ function mercator(center, pxPerKm, at, clip) {
   return d3.geoMercator().center([center.lon, center.lat]).scale(scale).translate(at).clipExtent(clip);
 }
 
+// degrees minutes seconds text
 function dms(value, positive, negative) {
   const minutes = Math.round(Math.abs(value) * 60);
   return `${Math.floor(minutes / 60)}°${minutes % 60 ? String(minutes % 60).padStart(2, "0") + "′" : ""}${value < 0 ? negative : positive}`;
@@ -659,6 +695,7 @@ function pathOf(projection) {
   return (shape) => path(shape) || "";
 }
 
+// circle shape around a point
 function circle(point, radiusKm) { return d3.geoCircle().center([point.lon, point.lat]).radius(radiusKm / 111.2)(); }
 
 // distance rings around the guess
@@ -701,6 +738,7 @@ function sideTag([x, y], gap, anchor, [width, height], title, detail, cls = "") 
   return placeTag(x + (anchor === "end" ? -gap : gap), Math.min(Math.max(y - 4, 40), height - 44), anchor, title, detail, cls);
 }
 
+// draw the guess circle
 function guessCircle(path, area) {
   const d = path(circle(area, area.radius_km));
   return `<path class="guess-halo" d="${d}"/><path class="guess" d="${d}"/>`;
@@ -724,6 +762,7 @@ function chart(svg, area, halfKm, at, ripples, avoid = []) {
   };
 }
 
+// draw the attack map
 async function showAttackMap(attack, gps) {
   const svg = await mapSvg("Mercator. Map data: Natural Earth, US Census Bureau.");
   if (!svg) return;
@@ -831,7 +870,7 @@ async function showProfileMap(profile) {
   svg.insertAdjacentHTML("afterend", `<p class="map-note">Pills: each photo's own guess.${offMap ? ` ${offMap} more ${offMap === 1 ? "is" : "are"} off this map.` : ""}</p>`);
 }
 
-// start up
+// start the app
 async function init() {
   fitStage();
   window.addEventListener("resize", fitStage);
