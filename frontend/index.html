@@ -8,23 +8,51 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="bar">
-    <p class="wordmark">Unmapped</p>
-    <nav class="sheets" aria-label="Steps">
-      <button type="button" id="tab-attack"><span class="no">1</span>Attack</button>
-      <button type="button" id="tab-protect" disabled><span class="no">2</span>Protect</button>
-      <button type="button" id="tab-profile"><span class="no">3</span>Profile</button>
+  <header class="top">
+    <p class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><circle cx="14" cy="14" r="11" stroke="currentColor" stroke-width="2.2" stroke-dasharray="52 17.1" transform="rotate(-38 14 14)"/><circle cx="14" cy="14" r="3.4" fill="currentColor"/></svg>
+      Unmapped
+    </p>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <svg class="slash" width="12" height="20" viewBox="0 0 12 20" aria-hidden="true"><path d="M10 2 2 18"/></svg>
+      <span id="crumb-section">Scans</span>
+      <svg class="slash" width="12" height="20" viewBox="0 0 12 20" aria-hidden="true"><path d="M10 2 2 18"/></svg>
+      <b id="crumb-leaf">New scan</b>
     </nav>
-    <button type="button" class="theme" id="theme" aria-label="Switch to dark theme">
+    <span class="spacer"></span>
+    <button type="button" class="cmd" id="cmd">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="m12.2 12.2 4 4"/></svg>
+      Open a photo
+      <span class="kb" id="cmd-key">⌘K</span>
+    </button>
+    <span class="chip local"><i></i>Runs locally</span>
+    <button type="button" class="icon-btn" id="theme" aria-label="Switch to dark theme">
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
       <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
     </button>
   </header>
 
-  <main id="app"></main>
+  <div class="page">
+    <div class="head">
+      <div class="title">
+        <h1 id="title" tabindex="-1"></h1>
+        <p class="meta" id="meta"></p>
+      </div>
+      <span class="spacer"></span>
+      <nav class="tabs" aria-label="Steps">
+        <button type="button" class="tab" id="tab-attack">Attack <span class="kb">1</span></button>
+        <button type="button" class="tab" id="tab-protect" disabled>Protect <span class="kb">2</span></button>
+        <button type="button" class="tab" id="tab-profile">Profile <span class="kb">3</span></button>
+      </nav>
+      <div class="action" id="action"></div>
+    </div>
+    <main id="app"></main>
+  </div>
 
-  <footer class="imprint">
-    <span>Runs on this laptop. Photos leave it only if you click Test against Claude.</span>
+  <footer class="foot">
+    <span>Runs on this laptop. Photos leave it only if you click Check with Claude.</span>
+    <span class="spacer"></span>
+    <span id="photo-credit"></span>
     <span id="map-credit"></span>
   </footer>
   <p class="sr" id="say" aria-live="polite"></p>
@@ -35,43 +63,49 @@
   <!-- screen: start -->
   <template id="tpl-start">
     <section class="start">
-      <div class="start-copy">
-        <h1 tabindex="-1">See what a photo gives away before you post it.</h1>
-        <p class="lede">An open AI model, a text reader and a face finder attack your photo on this laptop. Then Unmapped hides what they found and attacks it again.</p>
-        <button type="button" class="drop" id="drop">
-          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
-          <span class="drop-title">Drop a photo here, or click to choose one</span>
-          <span class="fine">JPEG, PNG or iPhone HEIC</span>
+      <section class="card drop" id="drop-zone">
+        <button type="button" class="drop-btn" id="drop">
+          <span class="drop-ico" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>
+          <span class="drop-title">Drop a photo here</span>
+          <span class="drop-sub">or click to choose one. JPEG, PNG or iPhone HEIC.</span>
         </button>
-      </div>
-      <div class="start-examples">
-        <h2 class="eyebrow">Or try an example</h2>
-        <div id="examples"><p class="fine">Loading examples...</p></div>
-      </div>
+        <ul class="rows checks-list">
+          <li class="row"><span class="ico" data-icon="pin"></span><div><p class="rt">GPS, camera and time</p><p class="rd">Read straight from the file</p></div></li>
+          <li class="row"><span class="ico" data-icon="globe"></span><div><p class="rt">Location from the pixels</p><p class="rd">GeoCLIP, an open AI model, guesses where it was taken</p></div></li>
+          <li class="row"><span class="ico" data-icon="text"></span><div><p class="rt">Readable text and faces</p><p class="rd">Apple's on-device detectors find signs and people</p></div></li>
+        </ul>
+      </section>
+      <section class="card ex-card">
+        <div class="ch"><h2>Examples</h2><span class="aside">True spot known, so every error is real</span></div>
+        <div id="examples"><p class="pad fine">Loading examples...</p></div>
+      </section>
     </section>
   </template>
 
   <!-- screen: waiting -->
   <template id="tpl-wait">
     <section class="wait">
-      <div class="wait-left" id="wait-left"></div>
-      <div class="working" role="status">
-        <h1 tabindex="-1" id="wait-title"></h1>
-        <p class="lede" id="wait-detail"></p>
-        <p class="elapsed" id="elapsed" aria-hidden="true">0<small>s</small></p>
-        <div class="track" aria-hidden="true"><span></span></div>
-        <ol class="pline" id="plan"></ol>
-      </div>
+      <figure class="photo-panel wait-photo" id="wait-left"></figure>
+      <section class="card wait-card" role="status">
+        <div class="ch"><h2 id="wait-title"></h2><span class="aside">On this laptop</span></div>
+        <div class="wait-body">
+          <p class="sl">Elapsed</p>
+          <p class="elapsed" id="elapsed">0<small>s</small></p>
+          <div class="track" aria-hidden="true"><span></span></div>
+          <p class="wait-detail" id="wait-detail"></p>
+        </div>
+        <ol class="rows plan" id="plan"></ol>
+      </section>
     </section>
   </template>
 
   <!-- screen: error -->
   <template id="tpl-error">
-    <section class="error" role="alert">
-      <div class="inset">
-        <h2 class="eyebrow">Something went wrong</h2>
-        <h1 tabindex="-1">Unmapped couldn't finish that.</h1>
-        <p class="lede" id="error-text"></p>
+    <section class="error">
+      <div class="card err-card" role="alert">
+        <span class="ico hot" data-icon="alert"></span>
+        <h2>Unmapped couldn't finish that</h2>
+        <p id="error-text"></p>
         <button type="button" class="btn ghost" id="back">Start over</button>
       </div>
     </section>
@@ -79,151 +113,133 @@
 
   <!-- screen: attack -->
   <template id="tpl-attack">
-    <section class="attack">
-      <div class="a-left">
-        <div class="gps inset" id="gps" hidden>
-          <h2 class="eyebrow">Found in the file first</h2>
-          <p class="gps-title">GPS metadata gives the exact spot. No AI needed.</p>
-          <p class="gps-details" id="gps-details"></p>
+    <section class="grid attack">
+      <figure class="photo-panel">
+        <div class="shot" id="shot">
+          <img id="photo" alt="">
+          <div class="heat-layer" id="heat-layer"><canvas id="heat-canvas"></canvas><div class="cells"></div></div>
+          <div class="marks" id="marks"></div>
         </div>
-        <h1 tabindex="-1" id="headline"></h1>
-        <figure class="plate">
-          <div class="shot-box"><div class="shot" id="shot"><img id="photo" alt="">
-            <div class="heat-layer" id="heat-layer" hidden><img id="heat-img" alt="Heatmap of what gave the location away"><div class="view"></div></div>
-            <svg class="rings" id="rings" aria-hidden="true"></svg><div class="marks" id="marks"></div></div></div>
-          <figcaption>
-            <button type="button" class="toggle" id="heat" aria-pressed="false">What gave it away</button>
-            <span id="heat-note">Rings mark where the model looked hardest.</span>
-          </figcaption>
-        </figure>
-        <p class="credit" id="credit"></p>
-      </div>
-      <div class="a-right">
-        <div class="mapframe" id="map-box">
-          <div class="hero inset">
-            <p class="eyebrow" id="hero-label"></p>
-            <p class="num" id="hero-num"></p>
-            <p class="hero-sub" id="hero-sub"></p>
-            <p class="score-line"><span class="eyebrow">Privacy score</span> <b class="score-n" id="hero-score"></b><span class="of">/ 100, 100 = safest</span></p>
-          </div>
+        <div class="toolbar" role="group" aria-label="Photo view">
+          <button type="button" class="tool" id="mode-heat" aria-pressed="true">Heatmap <span class="kb">H</span></button>
+          <button type="button" class="tool" id="mode-text" aria-pressed="true">Text <span class="kb">T</span></button>
+          <button type="button" class="tool" id="mode-original" aria-pressed="false">Original <span class="kb">O</span></button>
         </div>
-        <div class="a-bottom">
-          <div class="findings">
-            <h2 class="eyebrow">What the attacker found</h2>
-            <div id="findings"></div>
-          </div>
-          <div class="act">
-            <fieldset class="options">
-              <legend class="sr">What to protect</legend>
-              <label><input type="checkbox" id="opt-text" checked> Blur text</label>
-              <label><input type="checkbox" id="opt-faces" checked> Blur faces</label>
-              <label><input type="checkbox" id="opt-cloak" checked> Invisible cloak, about 30 s</label>
-            </fieldset>
-            <div class="buttons">
-              <button type="button" class="btn primary" id="protect">
-                <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6l-8-3Z"/></svg>
-                Protect this photo
-              </button>
-              <button type="button" class="btn ghost" id="new">New photo</button>
-            </div>
-          </div>
-        </div>
-      </div>
+        <figcaption class="legend" id="legend"><span>What drove the guess</span><span class="spacer"></span><span class="dim">Low</span><span class="ramp"></span><span class="dim">High</span></figcaption>
+      </figure>
+      <section class="card">
+        <div class="ch"><h2>What gave it away</h2><span class="aside" id="flag-count"></span></div>
+        <ul class="rows" id="findings"></ul>
+      </section>
+      <section class="card map-card">
+        <div class="ch"><h2>Where the attacker thinks you are</h2><span class="aside">Top guess</span></div>
+        <div class="map-box" id="map-box"></div>
+        <div class="stats" id="stats"></div>
+      </section>
+      <section class="card strip">
+        <div class="score" id="score-box"></div>
+        <div class="ruler"><h2 id="ruler-title">How far off the attacker lands</h2><span class="aside">Log scale, km</span><svg id="ruler" aria-hidden="true"></svg></div>
+      </section>
     </section>
+    <div class="bar">
+      <fieldset class="options">
+        <legend>Protect will</legend>
+        <label class="opt"><input type="checkbox" id="opt-text" checked> Blur text</label>
+        <label class="opt"><input type="checkbox" id="opt-faces" checked> Blur faces</label>
+        <label class="opt"><input type="checkbox" id="opt-cloak" checked> Add the invisible cloak, about 30 s</label>
+      </fieldset>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="new">New photo</button>
+    </div>
   </template>
 
   <!-- screen: protected -->
   <template id="tpl-protected">
-    <section class="protected">
-      <h1 tabindex="-1" id="headline"></h1>
-      <div class="band">
-        <div class="mapframe" id="map-box"></div>
-        <div class="process inset">
-          <h2 class="eyebrow">What Protect did</h2>
-          <ul class="pline" id="checks"></ul>
+    <section class="grid attack protected">
+      <figure class="photo-panel">
+        <div class="shot compare" id="shot">
+          <img id="before" alt="Original photo">
+          <div class="after"><img id="after" alt="Protected photo"><div class="marks" id="blurs"></div></div>
+          <div class="marks" id="blur-labels"></div>
+          <div class="handle" id="handle" role="slider" tabindex="0" aria-label="Compare protected and original" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+            <span class="knob"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6 3 11l5 5M14 6l5 5-5 5"/></svg></span>
+          </div>
         </div>
-        <div class="plates inset">
-          <figure><div class="pl-img"><img id="before" alt="Original photo"></div><figcaption>Original</figcaption></figure>
-          <figure class="saved"><div class="pl-img"><img id="after" alt="Protected photo"><div id="blurs"></div></div><figcaption>Saved</figcaption></figure>
-        </div>
-      </div>
-      <div class="p-row">
-        <div class="p-hero">
-          <p class="eyebrow" id="p-label"></p>
-          <p class="num" id="p-num"></p>
-        </div>
-        <div class="p-was" id="p-was"></div>
-        <div class="p-score">
-          <p class="eyebrow">Privacy score, 100 = safest</p>
-          <p class="score-n" id="score"></p>
-        </div>
-        <div class="buttons">
-          <a class="btn primary" id="save" download="unmapped.jpg">
-            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M4 19h16"/></svg>
-            Save protected photo
-          </a>
-          <button type="button" class="btn ghost" id="again">Start over</button>
-        </div>
-      </div>
-      <div class="claude-band">
-        <div class="honest">
-          <h2 class="eyebrow">What still gives you away</h2>
-          <p id="honest"></p>
-        </div>
-        <div class="claude" id="claude-out">
-          <h2 class="eyebrow">Optional: test against Claude, a commercial AI</h2>
-          <button type="button" class="btn ghost" id="claude-test">Send both photos to Claude</button>
-          <p class="fine">This sends the original and the protected photo to Anthropic.</p>
-        </div>
-      </div>
+        <div class="toolbar"><span class="tool">Drag to compare <span class="kb">← →</span></span></div>
+        <span class="side left"><i class="safe"></i>Protected</span>
+        <span class="side right"><i></i>Original</span>
+      </figure>
+      <section class="card">
+        <div class="ch"><h2>What Protect changed</h2><span class="aside" id="step-count"></span></div>
+        <ul class="rows" id="checks"></ul>
+      </section>
+      <section class="card map-card">
+        <div class="ch"><h2>Where the attacker thinks you are now</h2><span class="aside">Top 5 guesses</span></div>
+        <div class="map-box" id="map-box"></div>
+        <div class="stats" id="stats"></div>
+      </section>
+      <section class="card strip">
+        <div class="score" id="score-box"></div>
+        <div class="ruler"><h2 id="ruler-title">How far off the attacker lands</h2><span class="aside">Log scale, km</span><svg id="ruler" aria-hidden="true"></svg></div>
+      </section>
     </section>
+    <div class="bar">
+      <p class="honest" id="honest"></p>
+      <div class="claude" id="claude-out">
+        <button type="button" class="btn ghost" id="claude-test">Check with Claude</button>
+        <span class="fine">Sends both photos to Anthropic</span>
+      </div>
+      <button type="button" class="btn ghost" id="again">New photo</button>
+    </div>
   </template>
 
   <!-- screen: profile feed -->
   <template id="tpl-feed">
     <section class="feed">
-      <div class="intro">
-        <h1 tabindex="-1">Each photo alone is vague. Together they point to one neighborhood.</h1>
-        <p class="lede">Add 5 to 10 photos from one account, with their captions. Unmapped attacks each photo, then combines the guesses the way a stalker would.</p>
-        <p class="fine">Run it on your own feed as a self-audit.</p>
-        <div class="buttons">
-          <button type="button" class="btn ghost" id="add">Add photos</button>
-          <button type="button" class="btn ghost" id="example-feed">Load example feed</button>
+      <section class="card feed-card" id="feed-drop">
+        <div class="ch"><h2>Posts</h2><span class="aside" id="feed-count"></span><button type="button" class="btn ghost small" id="add">Add photos</button></div>
+        <div class="posts-box" id="posts"></div>
+      </section>
+      <section class="card why-card">
+        <div class="ch"><h2>Why a feed is riskier than one photo</h2></div>
+        <div class="why-body">
+          <p class="why-big">Each photo alone is vague. Together they point to one neighborhood.</p>
+          <p>Unmapped attacks each photo with GeoCLIP, multiplies the guesses together the way a stalker would, then scans the captions for school, team, home and routine.</p>
+          <p class="fine">Run it on your own feed as a self-audit.</p>
+          <div class="why-actions">
+            <button type="button" class="btn ghost" id="example-feed">Load example feed</button>
+            <span class="fine" id="example-note"></span>
+          </div>
+          <div class="sample" id="sample" aria-hidden="true"></div>
         </div>
-      </div>
-      <div class="feed-list inset" id="feed-drop">
-        <div id="posts"></div>
-        <div class="run">
-          <p class="fine" id="feed-count"></p>
-          <button type="button" class="btn primary" id="run-profile">Attack this feed</button>
-        </div>
-      </div>
+      </section>
     </section>
   </template>
 
   <!-- screen: profile result -->
   <template id="tpl-profile">
     <section class="profile">
-      <div class="r-top">
-        <h1 tabindex="-1" id="headline"></h1>
+      <section class="card nums-card">
+        <div class="ch"><h2>Alone vs together</h2></div>
         <div class="narrow">
-          <p class="eyebrow e1" id="alone-label"></p>
-          <p class="eyebrow e2" id="together-label"></p>
-          <p class="num n1" id="alone"></p>
-          <svg class="narrow-arrow" viewBox="0 0 120 24" aria-hidden="true"><path d="M0 12h116M104 2l12 10-12 10"/></svg>
-          <p class="num n2" id="together"></p>
+          <div><p class="sl" id="alone-label"></p><p class="big-km alone" id="alone"></p></div>
+          <svg class="narrow-arrow" viewBox="0 0 60 24" aria-hidden="true"><path d="M2 12h54M46 4l10 8-10 8"/></svg>
+          <div><p class="sl" id="together-label"></p><p class="big-km together" id="together"></p></div>
         </div>
-      </div>
-      <div class="mapframe" id="map-box"></div>
-      <svg class="logaxis" id="axis" role="img" aria-label="Each photo's distance on a log scale"></svg>
-      <div class="captions">
-        <div class="cap-head">
-          <h2 class="eyebrow">What the captions say</h2>
-          <p id="flagged"></p>
-          <button type="button" class="btn ghost small" id="edit">Edit feed</button>
-        </div>
+        <div class="score" id="score-box"></div>
+      </section>
+      <section class="card map-card">
+        <div class="ch"><h2>Where the feed points</h2><span class="aside" id="map-aside">Pills: each photo's guess</span></div>
+        <div class="map-box" id="map-box"></div>
+      </section>
+      <section class="card cap-card">
+        <div class="ch"><h2>What the captions say</h2><span class="aside" id="flagged"></span></div>
         <ol class="caplist" id="caplist"></ol>
-      </div>
+      </section>
+      <section class="card axis-card">
+        <div class="ch"><h2>Each photo on its own</h2><span class="aside">Log scale, km</span></div>
+        <svg class="logaxis" id="axis" role="img" aria-label="Each photo's distance on a log scale"></svg>
+      </section>
     </section>
   </template>
 

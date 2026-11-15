@@ -25,6 +25,14 @@ ROOT = Path(__file__).parent.parent
 EXAMPLES = {example["id"]: example for example in json.load(open(ROOT / "demo" / "examples.json"))}
 
 app = FastAPI()
+
+
+# always send the newest page files, never a cached copy
+@app.middleware("http")
+async def no_cache(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 photos = {}
 # one photo at a time on the GPU
 gpu = threading.Lock()

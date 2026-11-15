@@ -4,12 +4,16 @@ const state = {
   examplesError: null, // why examples failed
   claude: false, // Claude check allowed
   example: null, // chosen example
+  name: "", // file name of the photo
   attack: null, // attack result
   options: null, // protect checkboxes
   protect: null, // protect result
+  view: { heat: true, text: true }, // photo layers shown
   feed: [], // uploaded profile photos
+  feedName: "", // which feed was attacked
   posts: [], // photos in the profile result
   profile: null, // profile result
+  screen: null, // template on screen
 };
 let timer = null;
 let geo = null;
@@ -34,6 +38,8 @@ function median(values) {
 
 // clue without the looks-like prefix
 function clueText(clue) { return clue.clue.replace(/^looks like (a |an )?/i, ""); }
+// first letter in capitals
+function capital(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
 // is this an iPhone HEIC file
 function isHeic(name) { return /\.(heic|heif)$/i.test(name); }
 // is this file an image
@@ -52,6 +58,10 @@ function distanceKm(a, b) { return d3.geoDistance([a.lon, a.lat], [b.lon, b.lat]
 function kmNum(value, prefix = "") { return `${prefix}${km(value)}<span class="u">km</span>`; }
 // examples for the profile feed
 function feedExamples() { return state.examples.filter((example) => example.mode === "profile"); }
+// lat and lon on two lines
+function coords(point) {
+  return `${Math.abs(point.lat).toFixed(2)}° ${point.lat < 0 ? "S" : "N"}<br>${Math.abs(point.lon).toFixed(2)}° ${point.lon < 0 ? "W" : "E"}`;
+}
 
 // server calls
 async function getJson(path, options) {
@@ -86,9 +96,49 @@ function fitStage() {
   document.documentElement.style.setProperty("--stage-h", innerHeight / zoom + "px");
 }
 
+// line icons, 20 px
+const ICONS = {
+  text: '<path d="M4 5h12M10 5v11"/>',
+  scene: '<path d="M2.5 16.5h15M4 16.5V9l6-4 6 4v7.5"/><path d="M8 16.5v-4a2 2 0 0 1 4 0v4"/>',
+  pin: '<path d="M10 17.5s5.5-5 5.5-9.5a5.5 5.5 0 0 0-11 0c0 4.5 5.5 9.5 5.5 9.5Z"/><circle cx="10" cy="8" r="1.8"/>',
+  face: '<circle cx="10" cy="10" r="7.2"/><path d="M7.3 12.2c.8.8 1.7 1.2 2.7 1.2s1.9-.4 2.7-1.2M7.6 8.2h.01M12.4 8.2h.01"/>',
+  camera: '<path d="M2.5 6.5h3l1.5-2h6l1.5 2h3v10h-15z"/><circle cx="10" cy="11" r="3"/>',
+  globe: '<circle cx="10" cy="10" r="7.2"/><path d="M2.8 10h14.4M10 2.8c2 2 2.8 4.4 2.8 7.2s-.8 5.2-2.8 7.2c-2-2-2.8-4.4-2.8-7.2s.8-5.2 2.8-7.2Z"/>',
+  unread: '<path d="M4 5h12M10 5v11M3 17 17 3"/>',
+  cloak: '<rect x="3" y="3" width="14" height="14" rx="2.5"/><path d="M3 8h14M3 12.5h14M8 3v14M12.5 3v14" stroke-opacity=".6"/>',
+  file: '<path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="m7.5 11 2 2 3.5-4"/>',
+  again: '<path d="M16.5 10a6.5 6.5 0 1 1-2-4.7"/><path d="M16.5 3v3.5H13"/>',
+  alert: '<path d="M10 3 2.5 16.5h15z"/><path d="M10 8.5v3.5M10 14.5h.01"/>',
+  check: '<path d="m4 10.5 4 4 8-9"/>',
+  shield: '<path d="M10 2.5 3.5 5v5c0 3.9 2.8 6.6 6.5 7.5 3.7-.9 6.5-3.6 6.5-7.5V5L10 2.5Z"/>',
+  download: '<path d="M10 3v10M5.5 8.5 10 13l4.5-4.5M3.5 16.5h13"/>',
+  upload: '<path d="M10 14V3M5.5 7.5 10 3l4.5 4.5M3.5 16.5h13"/>',
+  dot: '<circle cx="10" cy="10" r="2.5"/>',
+};
+
+// one icon as svg
+function icon(name) { return `<svg class="i" viewBox="0 0 20 20" aria-hidden="true">${ICONS[name]}</svg>`; }
+
+// rounded status label
+function chip(kind, text, dot = false) { return `<span class="chip ${kind}">${dot ? "<i></i>" : ""}${text}</span>`; }
+
+// fill the page header
+function head(title, chipHtml, meta, actionHtml = "") {
+  fill("title", `<span class="title-text">${esc(title)}</span>${chipHtml}`);
+  fill("meta", meta.filter(Boolean).map((part) => `<span>${part}</span>`).join('<span class="sep"></span>'));
+  fill("action", actionHtml);
+}
+
+// set the breadcrumb
+function crumbs(section, leaf) {
+  fill("crumb-section", esc(section));
+  fill("crumb-leaf", esc(leaf));
+}
+
 // swap in a screen
 function show(templateId, tab) {
   clearInterval(timer);
+  state.screen = templateId;
   ["attack", "protect", "profile"].forEach((name) => {
     const button = document.getElementById("tab-" + name);
     button.classList.toggle("on", name === tab);
@@ -97,19 +147,25 @@ function show(templateId, tab) {
   });
   document.getElementById("tab-protect").disabled = !(state.protect && state.attack && state.protect.id === state.attack.id);
   fill("map-credit", "");
+  fill("photo-credit", "");
   app.replaceChildren(document.getElementById(templateId).content.cloneNode(true));
-  app.querySelector("h1").focus({ preventScroll: true });
+  app.querySelectorAll("[data-icon]").forEach((box) => (box.innerHTML = icon(box.dataset.icon)));
+  document.getElementById("title").focus({ preventScroll: true });
   window.scrollTo(0, 0);
 }
 
-// click or drag to add files
-function hookFiles(button, zone, inputId, onFiles) {
+// open the file picker
+function pickFiles(inputId, onFiles) {
   const input = document.getElementById(inputId);
   input.onchange = () => {
     if (input.files.length) onFiles([...input.files]);
     input.value = "";
   };
-  button.addEventListener("click", () => input.click());
+  input.click();
+}
+
+// drag files onto a zone
+function hookDrop(zone, onFiles) {
   zone.addEventListener("dragover", (event) => { event.preventDefault(); zone.classList.add("over"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("over"));
   zone.addEventListener("drop", (event) => {
@@ -119,20 +175,27 @@ function hookFiles(button, zone, inputId, onFiles) {
   });
 }
 
+// pick one photo to attack
+function openPhoto() { pickFiles("pick-one", (files) => runUpload(files[0])); }
+
 // screen: start
 function renderStart() {
   show("tpl-start", "attack");
-  const drop = document.getElementById("drop");
-  hookFiles(drop, drop, "pick-one", (files) => runUpload(files[0]));
+  crumbs("Scans", "New scan");
+  head("See what a photo gives away", "", ["Three attacks, all on this laptop", "Then Unmapped hides what they found and attacks again"],
+    `<button type="button" class="btn primary" id="choose">${icon("upload")}Choose a photo</button>`);
+  document.getElementById("choose").addEventListener("click", openPhoto);
+  document.getElementById("drop").addEventListener("click", openPhoto);
+  hookDrop(document.getElementById("drop-zone"), (files) => runUpload(files[0]));
   showExamples();
 }
 
 // list the example photos
 function showExamples() {
   const box = document.getElementById("examples");
-  if (!box) return;
+  if (!box || state.screen !== "tpl-start") return;
   const singles = state.examples.filter((example) => example.mode !== "profile");
-  if (state.examplesError) box.innerHTML = `<p class="notice" role="alert">${esc(state.examplesError)}</p>`;
+  if (state.examplesError) box.innerHTML = `<p class="pad notice" role="alert">${esc(state.examplesError)}</p>`;
   if (!singles.length) return;
   box.innerHTML = `<ul class="examples">${singles.map((example) => `<li>
     <button type="button" class="example" data-example="${esc(example.id)}">
@@ -144,21 +207,24 @@ function showExamples() {
 // screen: waiting
 function renderWait(title, detail, left, plan, tab) {
   show("tpl-wait", tab);
+  crumbs(tab === "profile" ? "Profiles" : "Scans", tab === "profile" ? state.feedName : state.name);
+  head(tab === "profile" ? state.feedName : state.name, chip("mute busy", tab === "protect" ? "Protecting" : "Attacking", true), [plural(plan.length, "step"), "Runs on this laptop"]);
   fill("wait-title", esc(title));
   fill("wait-detail", esc(detail));
   fill("wait-left", left);
-  fill("plan", plan.map((item) => `<li><b>${esc(item)}</b></li>`).join(""));
+  fill("plan", plan.map((item) => `<li class="row">${`<span class="ico">${icon("dot")}</span>`}<div><p class="rt">${esc(item)}</p></div></li>`).join(""));
   say(title);
   const start = Date.now();
   timer = setInterval(() => fill("elapsed", Math.floor((Date.now() - start) / 1000) + "<small>s</small>"), 250);
 }
 
 // photo with a scan line
-function preview(src, alt) { return `<figure class="preview"><img src="${src}" alt="${esc(alt)}"><span class="scan" aria-hidden="true"></span></figure>`; }
+function preview(src, alt) { return `<div class="preview"><img src="${src}" alt="${esc(alt)}"><span class="scan" aria-hidden="true"></span></div>`; }
 
 // draw the error screen
 function renderError(message) {
   show("tpl-error", null);
+  head("Something went wrong", chip("hot", "Stopped", true), ["Nothing was saved or sent"]);
   fill("error-text", esc(message));
   document.getElementById("back").addEventListener("click", renderStart);
 }
@@ -173,6 +239,7 @@ function runAttack(request, left) {
 // attack an example photo
 function runExample(id) {
   state.example = state.examples.find((example) => example.id === id) || null;
+  state.name = id + ".jpg";
   const title = state.example ? state.example.title : "Example photo";
   return runAttack(postForm("attack_example/" + encodeURIComponent(id), {}), preview(exampleUrl(id), title));
 }
@@ -181,6 +248,7 @@ function runExample(id) {
 function runUpload(file) {
   state.example = null;
   if (!file || !isImage(file)) return renderError("That file isn't a photo. Choose a JPEG, PNG or HEIC image.");
+  state.name = file.name;
   const left = isHeic(file.name) ? "" : preview(URL.createObjectURL(file), "Your photo");
   return runAttack(postForm("attack", { image: file }), left);
 }
@@ -194,7 +262,10 @@ function clueList(attack) {
 }
 
 // skip OCR junk with under 3 letters
-function readable(clue) { return clue.kind === "face" || (clue.label.match(/[a-z]/gi) || []).length >= 3; }
+function readable(clue) { return clue.kind === "face" || letters(clue) >= 3; }
+
+// count of letters in a clue
+function letters(clue) { return (clue.label.match(/[a-z]/gi) || []).length; }
 
 // boxes as % of the photo
 function boxStyle(box, attack) {
@@ -205,79 +276,150 @@ function boxStyle(box, attack) {
 // do two boxes overlap
 function overlaps(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
 
-// numbered tags beside the first 3 boxes
-function clueMarks(attack) {
-  const clues = clueList(attack);
+// white labels under the first 3 boxes
+function boxLabels(items, attack, iconName) {
   const shot = document.getElementById("shot");
-  const [w, h, size] = [shot.clientWidth, shot.clientHeight, 34];
-  const taken = clues.map(({ box }) => [box[0] * w / attack.width, box[1] * h / attack.height, box[2] * w / attack.width, box[3] * h / attack.height]);
-  const tagged = taken.filter((box, index) => readable(clues[index])).slice(0, 3);
-  const tags = tagged.map(([left, top, right, bottom], index) => {
-    const [cx, cy] = [(left + right - size) / 2, (top + bottom - size) / 2];
-    // try each side, near then far
-    const spots = [12, 44].flatMap((gap) => [["top", cx, top - gap - size, gap], ["bottom", cx, bottom + gap, gap], ["left", left - gap - size, cy, gap], ["right", right + gap, cy, gap]]);
-    const inside = ([, x, y]) => x >= 0 && y >= 0 && x + size <= w && y + size <= h;
-    const free = (spot) => inside(spot) && !taken.some((box) => overlaps(box, [spot[1], spot[2], spot[1] + size, spot[2] + size]));
-    const [side, x, y, gap] = spots.find(free) || spots.find(inside) || spots[1];
-    taken.push([x, y, x + size, y + size]);
-    return `<b class="tag ${side}" style="left:${(x / w) * 100}%;top:${(y / h) * 100}%;--gap:${gap}px">${index + 1}</b>`;
-  });
-  return clues.map((clue) => `<div class="mark ${clue.kind}" style="${boxStyle(clue.box, attack)}"></div>`).join("") + tags.join("");
+  const [w, h] = [shot.clientWidth, shot.clientHeight];
+  const placed = [];
+  return items.slice(0, 3).map((item) => {
+    const [left, top, right, bottom] = [item.box[0] * w / attack.width, item.box[1] * h / attack.height, item.box[2] * w / attack.width, item.box[3] * h / attack.height];
+    const width = item.text.length * 11 + 48;
+    const x = Math.min(Math.max(left, 8), w - width - 8);
+    let y = bottom + 48 < h ? bottom + 8 : Math.max(top - 46, 8);
+    // step down past other labels
+    while (placed.some((other) => overlaps(other, [x, y, x + width, y + 38])) && y < h - 46) y += 44;
+    placed.push([x, y, x + width, y + 38]);
+    return `<span class="label" style="left:${(x / w) * 100}%;top:${(y / h) * 100}%">${icon(iconName)}<span>${esc(item.text)}</span></span>`;
+  }).join("");
 }
 
-// heat as contour rings on the photo
-function heatRings(attack) {
-  const n = attack.heat.length;
-  const k = 8;
-  const size = n * k;
-  // blow up each cell, then blur
-  const values = d3.range(size * size).map((i) => attack.heat[Math.floor(Math.floor(i / size) / k)][Math.floor((i % size) / k)]);
-  d3.blur2({ data: values, width: size }, k);
-  const peak = d3.max(values);
-  if (peak < 0.15) return "";
-  // GeoCLIP sees the center square
-  const side = Math.min(attack.width, attack.height);
-  const toPhoto = d3.geoIdentity().scale(side / size).translate([(attack.width - side) / 2, (attack.height - side) / 2]);
-  const rings = d3.contours().size([size, size]).thresholds([0.45, 0.65, 0.85].map((t) => t * peak))(values);
-  return rings.map((ring, index) => {
-    const d = d3.geoPath(toPhoto)(ring);
-    return `<path class="halo" d="${d}"/><path class="ring r${index}" d="${d}"/>`;
-  }).join("");
+// boxes and labels for text and faces
+function clueMarks(attack) {
+  const clues = clueList(attack);
+  const named = clues.filter(readable).map((clue) => ({ box: clue.box, text: clue.label.slice(0, 30) }));
+  return clues.map((clue) => `<div class="mark ${clue.kind}" style="${boxStyle(clue.box, attack)}"></div>`).join("") + boxLabels(named, attack, "text");
+}
+
+// paint the heat grid, the browser smooths it
+function paintHeat(heat) {
+  const canvas = document.getElementById("heat-canvas");
+  canvas.width = canvas.height = heat.length;
+  const pen = canvas.getContext("2d");
+  const peak = Math.max(...heat.flat(), 0.01);
+  heat.forEach((row, y) => row.forEach((value, x) => {
+    pen.fillStyle = `rgba(226, 71, 12, ${Math.min(1, Math.max(0, value / peak - 0.06) * 1.15)})`;
+    pen.fillRect(x, y, 1, 1);
+  }));
+}
+
+// show or hide the photo layers
+function setView(view) {
+  state.view = view;
+  if (state.screen !== "tpl-attack") return;
+  document.getElementById("heat-layer").hidden = !view.heat;
+  document.getElementById("legend").hidden = !view.heat;
+  document.getElementById("marks").hidden = !view.text;
+  document.getElementById("mode-heat").setAttribute("aria-pressed", view.heat);
+  document.getElementById("mode-text").setAttribute("aria-pressed", view.text);
+  document.getElementById("mode-original").setAttribute("aria-pressed", !view.heat && !view.text);
+}
+
+// handle a photo mode button or key
+function photoMode(mode) {
+  const view = state.view;
+  if (mode === "heat") setView({ ...view, heat: !view.heat });
+  if (mode === "text") setView({ ...view, text: !view.text });
+  // original again brings both back
+  if (mode === "original") setView(view.heat || view.text ? { heat: false, text: false } : { heat: true, text: true });
 }
 
 // alt text for the photo
 function photoAlt() { return state.example ? "Example photo: " + state.example.title : "Your uploaded photo"; }
 
-// gps facts as small labels
-function gpsDetails(meta, place) {
-  const gps = meta.gps;
-  const details = [
-    `${Math.abs(gps.lat).toFixed(2)}° ${gps.lat < 0 ? "S" : "N"}, ${Math.abs(gps.lon).toFixed(2)}° ${gps.lon < 0 ? "W" : "E"}` + (place ? ", " + place : ""),
-    meta.camera,
-    meta.taken && "Taken " + meta.taken.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3").slice(0, 16),
-    meta.other.length && plural(meta.other.length, "more identifying field"),
-  ].filter(Boolean);
-  return details.map((item) => `<span>${esc(item)}</span>`).join("");
+// one row of a findings list
+function row(iconName, kind, title, detail, chipHtml, extra = "") {
+  return `<li class="row ${extra}"><span class="ico ${kind}">${icon(iconName)}</span><div><p class="rt">${title}</p><p class="rd">${detail}</p></div>${chipHtml}</li>`;
 }
 
-// list the top clues
-function findingsList(attack) {
-  const clues = clueList(attack).filter(readable);
-  const items = clues.slice(0, 3).map((clue, index) => `<li><b class="n">${index + 1}</b>
-    ${clue.kind === "text" ? `<span class="words">${esc(clue.label.slice(0, 26))}</span>` : "<span>A face</span>"}</li>`);
-  if (clues.length > 3) items.push(`<li><b class="n more">+</b><span>${plural(clues.length - 3, "more clue")} boxed</span></li>`);
-  const scenes = attack.ambient.slice(0, 2).map(clueText).join(" and ");
-  if (scenes) items.push(`<li class="wide"><b class="n scene" aria-hidden="true"></b><span>Scene looks like ${esc(scenes)}</span></li>`);
-  if (!items.length) return `<p class="fine">No readable text, faces or standout scenery. GeoCLIP read the scene as a whole.</p>`;
-  return `<ol class="clues">${items.join("")}</ol>`;
+// the five checks on an attacked photo
+function findingRows(attack) {
+  const meta = attack.metadata;
+  const rows = [];
+  if (meta.gps) rows.push(row("pin", "hot", "GPS location in the file", `<span class="mono">${coords(meta.gps).replace("<br>", ", ")}</span>&nbsp; <span id="gps-place"></span>`, chip("hot", "High"), "lead"));
+  const texts = clueList(attack).filter((clue) => clue.kind === "text" && readable(clue));
+  if (texts.length) rows.push(row("text", "hot", "Readable text", `<q>${esc(texts[0].label.slice(0, 30))}</q>${texts.length > 1 ? ` +${texts.length - 1} more` : ""}`, texts.some((clue) => letters(clue) >= 4) ? chip("hot", "High") : chip("hot", "Medium")));
+  else rows.push(row("text", "ok", "Readable text", "No signs or words found", chip("ok", "Clean")));
+  const scenes = attack.ambient.map(clueText);
+  if (scenes.length) rows.push(row("scene", "hot", esc(capital(scenes[0])), scenes[1] ? "Also " + esc(scenes[1]) : "Scenery the model can match", chip("hot", "Medium")));
+  else rows.push(row("scene", "", "Scenery", "No standout landmark found", chip("mute", "Low")));
+  const faces = attack.faces.length;
+  rows.push(faces ? row("face", "hot", plural(faces, "face"), "People who can be recognized", chip("hot", "High")) : row("face", "ok", "Faces", "None detected", chip("ok", "Clean")));
+  if (!meta.gps) rows.push(row("pin", "ok", "GPS metadata", "No coordinates stored in the file", chip("ok", "Clean")));
+  const stamp = [meta.camera, meta.taken && "taken " + meta.taken.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3").slice(0, 10)].filter(Boolean).join(", ");
+  rows.push(stamp ? row("camera", "hot", "Camera and time", esc(stamp), chip("hot", "Medium")) : row("camera", "ok", "Camera and time", "No device model or timestamp", chip("ok", "Clean")));
+  return rows;
 }
 
-// headline for the attack result
-function attackHeadline(reach, gps) {
-  if (gps) return "Your photo's file says exactly where you took it.";
-  if (reach < 30) return "An open AI model worked out where you took this photo.";
-  if (reach < 600) return "An open AI model narrowed this photo down to one region.";
-  return "An open AI model read the clues, but missed on this one.";
+// one stat under a map
+function stat(label, value, sub = "", cls = "") {
+  return `<div class="stat"><p class="sl">${label}</p><p class="sv ${cls}">${value}</p>${sub ? `<p class="sub">${sub}</p>` : ""}</div>`;
+}
+
+// privacy score with a 20 step meter
+function scoreHtml(score, was = null) {
+  const base = was == null ? score : Math.min(score, was);
+  const segs = d3.range(20).map((i) => `<i class="${(i + 1) * 5 <= base ? "on" : (i + 1) * 5 <= score ? "gain" : ""}"></i>`).join("");
+  const delta = was == null || score === was ? "" : `<em class="${score > was ? "up" : "down"}">${score > was ? "+" : ""}${score - was}</em>`;
+  return `<p class="score-label">Privacy score</p><p class="big"><b>${score}</b><span>/ 100</span>${delta}</p>
+    <div class="meter"><div class="segs">${segs}</div><div class="scale"><span>${was == null ? "0 exposed" : "Was " + was}</span><span>100 safest</span></div></div>`;
+}
+
+const ZONES = [[0.1, 1, "Street", "street level"], [1, 10, "Neighborhood", "same neighborhood"], [10, 100, "City", "same city"], [100, 1000, "Region", "same region"], [1000, 20037, "Another continent", "far away"]];
+
+// which zone a distance falls in
+function zoneOf(value) { return ZONES.find((zone) => value < zone[1]) || ZONES[4]; }
+
+// log band of how far off the guess is
+function drawRuler(marks) {
+  const svg = document.getElementById("ruler");
+  const width = svg.clientWidth;
+  const axis = 100;
+  const x = d3.scaleLog().domain([0.1, 20037]).range([0, width]).clamp(true);
+  svg.setAttribute("viewBox", `0 0 ${width} 172`);
+  let html = `<rect class="band" y="${axis}" width="${width}" height="38" rx="6"/>`;
+  let zones = "";
+  ZONES.forEach(([from, to, name], index) => {
+    if (index) html += `<line class="zone-line" x1="${x(from)}" x2="${x(from)}" y1="${axis}" y2="${axis + 38}"/>`;
+    zones += `<text class="zone" x="${(x(from) + x(to)) / 2}" y="${axis + 26}" text-anchor="middle">${name}</text>`;
+  });
+  html += `<line class="axis" x1="0" x2="${width}" y1="${axis}" y2="${axis}"/><line class="axis" x1="${width}" x2="${width}" y1="${axis - 30}" y2="${axis + 38}"/>`;
+  // ticks at 1 to 9 of each power of ten
+  d3.range(-1, 5).forEach((power) => d3.range(1, 10).forEach((step) => {
+    const at = x(step * 10 ** power);
+    if (step * 10 ** power <= 20037) html += `<line class="tick${step === 1 ? " major" : ""}" x1="${at}" x2="${at}" y1="${axis}" y2="${axis - (step === 1 ? 12 : 5)}"/>`;
+  }));
+  [0.1, 1, 10, 100, 1000, 10000].forEach((value) => {
+    html += `<text class="dec" x="${x(value)}" y="${axis - 18}" text-anchor="${value === 0.1 ? "start" : value === 10000 ? "end" : "middle"}">${value.toLocaleString("en-US")}</text>`;
+  });
+  html += `<text class="far" x="${width}" y="${axis + 64}" text-anchor="end">20,037 km is the far side of Earth</text>`;
+  const spots = marks.map((mark) => x(Math.max(mark.km, 0.1)));
+  // hop arrow from the first mark to the second
+  if (marks.length === 2 && Math.abs(spots[1] - spots[0]) > 60) {
+    const [a, b] = spots;
+    const dir = b > a ? 1 : -1;
+    html += `<path class="hop" d="M${a + 6 * dir} 66 C ${a + 140 * dir} 50, ${b - 160 * dir} 50, ${b - 10 * dir} 66"/><path class="hop" d="M${b - 18 * dir} 60l8 6-9 3"/>`;
+    if (Math.abs(b - a) > 420 && marks[1].hop) html += `<text class="hop-label" x="${(a + b) / 2}" y="48" text-anchor="middle">${marks[1].hop}</text>`;
+  }
+  marks.forEach((mark, index) => {
+    const at = spots[index];
+    const end = at > width * 0.62;
+    // lift the first label if the two are close
+    const top = marks.length === 2 && index === 0 && Math.abs(spots[1] - at) < 300 ? 8 : 30;
+    html += `<line class="mark-line ${mark.cls}" x1="${at}" x2="${at}" y1="${top}" y2="${axis + 38}"/><circle class="mark-dot ${mark.cls}" cx="${at}" cy="${axis}" r="6"/>
+      <text class="mark-label ${mark.cls}" x="${at + (end ? -12 : 12)}" y="${top + 16}" text-anchor="${end ? "end" : "start"}">${mark.label}${mark.note ? `<tspan class="mark-note" dx="8">${mark.note}</tspan>` : ""}</text>`;
+  });
+  // zone names on top of the marks
+  svg.innerHTML = html + zones;
 }
 
 // screen: attack
@@ -288,34 +430,43 @@ function renderAttack() {
   // true distance if known
   const off = attack.error_km ?? (gps ? distanceKm(gps, attack.location) : null);
   const shown = off ?? attack.location.radius_km;
-  const rings = heatRings(attack);
+  const rows = findingRows(attack);
+  const flagged = rows.filter((html) => html.includes("chip hot")).length;
+  const status = gps ? chip("hot", "GPS gives the exact spot", true) : off != null ? chip("hot", `Located within ${km(off)} km`, true) : chip("hot", `Narrowed to about ${km(shown)} km`, true);
+  crumbs("Scans", state.name);
+  head(state.name, status, [`${attack.width} × ${attack.height}`, `Scanned in <b>${attack.seconds} s</b>`, "Attacker model <b>GeoCLIP</b>", plural(rows.length, "check")],
+    `<button type="button" class="btn primary" id="protect">${icon("shield")}Protect this photo <span class="kb">P</span></button>`);
 
   app.querySelector(".attack").style.setProperty("--ar", attack.width / attack.height);
   Object.assign(document.getElementById("photo"), { src: photoUrl(attack.id), alt: photoAlt() });
-  document.getElementById("rings").setAttribute("viewBox", `0 0 ${attack.width} ${attack.height}`);
-  fill("rings", rings);
   fill("marks", clueMarks(attack));
-  fill("credit", state.example ? creditHtml(state.example.credit) : "");
+  fill("photo-credit", state.example ? creditHtml(state.example.credit) : "");
   // GeoCLIP only sees the center square
   const side = Math.min(attack.width, attack.height);
   const inset = `${((attack.height - side) / 2 / attack.height) * 100}% ${((attack.width - side) / 2 / attack.width) * 100}%`;
   document.getElementById("heat-layer").style.setProperty("--inset", inset);
-  document.getElementById("heat-img").src = "data:image/png;base64," + attack.heatmap_png;
-  document.getElementById("heat-note").hidden = !rings;
-  document.getElementById("gps").hidden = !gps;
-  fill("headline", attackHeadline(shown, gps));
-  fill("findings", findingsList(attack));
-  document.getElementById("heat").addEventListener("click", toggleHeat);
+  paintHeat(attack.heat);
+  setView(state.view);
+  fill("findings", rows.join(""));
+  fill("flag-count", `${flagged} of ${rows.length} flagged`);
+  const top = attack.location.top[0];
+  fill("stats", stat(gps ? "AI guess" : "Guess", coords(attack.location), "", "mono")
+    + stat("Radius shown", `${km(attack.location.radius_km)} km`, "Never a pin")
+    + (off != null
+      ? stat(gps ? "AI alone is off by" : "Actually off by", `${km(off)} km`, capital(zoneOf(off)[3]), "hot")
+      : stat("Confidence", `${(top.prob * 100).toFixed(1)}<small>%</small>`, "Top guess")));
+  fill("score-box", scoreHtml(attack.score));
+  drawRuler([off != null
+    ? { km: off, cls: "hot", label: `${km(off)} km`, note: zoneOf(off)[3] }
+    : { km: shown, cls: "hot", label: `~${km(shown)} km`, note: "area the guess covers" }]);
+  document.getElementById("mode-heat").addEventListener("click", () => photoMode("heat"));
+  document.getElementById("mode-text").addEventListener("click", () => photoMode("text"));
+  document.getElementById("mode-original").addEventListener("click", () => photoMode("original"));
   document.getElementById("protect").addEventListener("click", protectPhoto);
   document.getElementById("new").addEventListener("click", renderStart);
-  say("Attack finished. " + document.getElementById("headline").textContent);
-  fill("hero-label", gps ? "Without the GPS, AI is off by" : off != null ? "Off by" : "Somewhere within");
-  fill("hero-num", kmNum(shown, off != null ? "" : "~"));
-  document.getElementById("hero-num").classList.toggle("long", km(shown).length > 4);
-  fill("hero-sub", `GeoCLIP, an open model, in ${attack.seconds} s`);
-  fill("hero-score", attack.score);
+  say("Attack finished. " + document.getElementById("title").textContent);
   showAttackMap(attack, gps).then(() => {
-    if (gps && geo) fill("gps-details", gpsDetails(attack.metadata, regionName([gps.lon, gps.lat], 25)));
+    if (gps && geo && document.getElementById("gps-place")) fill("gps-place", esc(regionName([gps.lon, gps.lat], 25).split(",")[0]));
   });
 }
 
@@ -325,19 +476,6 @@ function creditHtml(credit) {
   if (!link) return esc(credit);
   const short = credit.replace(link[0], "").replace(" via ", " ");
   return `<a href="${esc(link[1])}" title="${esc(link[1])}" target="_blank" rel="noopener">${esc(short)}</a>`;
-}
-
-// heat only inside GeoCLIP's square
-function toggleHeat() {
-  const button = document.getElementById("heat");
-  const on = button.getAttribute("aria-pressed") !== "true";
-  button.setAttribute("aria-pressed", on);
-  document.getElementById("heat-layer").hidden = !on;
-  // svg needs the attribute
-  const rings = document.getElementById("rings");
-  rings.toggleAttribute("hidden", on);
-  fill("heat-note", on ? "Red: where blurring moved the guess most, inside the square GeoCLIP sees." : "Rings mark where the model looked hardest.");
-  document.getElementById("heat-note").hidden = !on && !rings.innerHTML;
 }
 
 // send the photo to be protected
@@ -357,32 +495,62 @@ function protectPhoto() {
     "Attack the saved file again to check",
   ].filter(Boolean);
   const title = options.cloak ? "Computing the invisible cloak" : "Protecting your photo";
-  const detail = options.cloak ? "About 30 seconds. Everything runs on this laptop." : "Everything runs on this laptop.";
+  const detail = options.cloak ? "Usually 30 to 60 seconds. Everything runs on this laptop." : "Everything runs on this laptop.";
   renderWait(title, detail, preview(photoUrl(attack.id), photoAlt()), plan, "protect");
   return postForm("protect", { id: attack.id, ...options })
     .then((result) => { state.protect = result; renderProtected(); })
     .catch((error) => renderError(error.message));
 }
 
-// list what protect changed
-function checklist(attack, protect, options) {
-  const items = [protect.after.metadata_found
-    ? ["warn", "Metadata still found", "in the saved file"]
-    : ["ok", "Metadata removed", "checked again after saving"]];
-  if (options.blur_text && attack.text.length) items.push(["ok", plural(attack.text.length, "text clue") + " blurred", attack.faces.length && !options.blur_faces ? "faces left as they were" : "readable words hidden"]);
-  if (options.blur_faces && attack.faces.length) items.push(["ok", plural(attack.faces.length, "face") + " blurred", "people can't be recognized"]);
-  if (options.cloak) items.push(["ok", "Cloak added", "at most 4 of 255 per pixel"]);
-  if (protect.after.text.length) items.push(["warn", "Text still readable", "in " + plural(protect.after.text.length, "place")]);
-  return items.map(([kind, title, detail]) => `<li class="${kind}"><b>${esc(title)}</b><span>${esc(detail)}</span></li>`).join("");
+// rows for what protect changed
+function changeRows(attack, protect, options, newPlace) {
+  const after = protect.after;
+  const known = !!(attack.truth || attack.metadata.gps);
+  const rows = [];
+  const texts = attack.text.length;
+  if (options.blur_text && texts) {
+    rows.push(after.text.length
+      ? row("alert", "hot", "Text still readable", `In ${plural(after.text.length, "place")} after blurring`, chip("hot", "Check"))
+      : row("unread", "ok", "Text blurred", `${plural(texts, "text clue")} no longer readable`, chip("ok", "Done")));
+  } else rows.push(row("text", "", "Text", texts ? "Left as it was" : "None to blur", chip("mute", "Skipped")));
+  const faces = attack.faces.length;
+  if (options.blur_faces && faces) rows.push(row("face", "ok", plural(faces, "face") + " blurred", "People can't be recognized", chip("ok", "Done")));
+  else rows.push(row("face", "", "Faces", faces ? "Left as they were" : "None to blur", chip("mute", "Skipped")));
+  if (options.cloak) rows.push(row("cloak", "ok", "Invisible cloak added", 'Max <b class="num">4/255</b> per pixel, less in smooth areas', chip("ok", "Done"), "wrap"));
+  else rows.push(row("cloak", "", "Invisible cloak", "Pixels not changed", chip("mute", "Skipped")));
+  const meta = attack.metadata;
+  const fields = ["gps", "camera", "taken"].filter((name) => meta[name]).length + meta.other.length;
+  rows.push(after.metadata_found
+    ? row("alert", "hot", "Metadata still found", "In the saved file", chip("hot", "Check"))
+    : row("file", "ok", "Metadata stripped", `${fields ? plural(fields, "field") + " removed, " : ""}file re-read: nothing left`, chip("ok", "Verified")));
+  const label = known ? `${km(after.error_km)} km off` : `Moved ${km(after.error_km)} km`;
+  rows.push(row("again", "ok", "Attacked again", `Now guesses ${esc(newPlace)}`, chip(after.error_km >= 100 ? "ok" : "mute", label)));
+  return rows;
 }
 
 // plain note on what protect can't fix
 function honestText(attack, options, moved) {
-  const leftovers = attack.ambient.map(clueText).join(", ") || "the buildings and scenery the rings marked";
+  const leftovers = attack.ambient.map(clueText).join(", ") || "the buildings and scenery";
   let cloak = "";
   if (options.cloak) cloak = moved ? "The cloak fools GeoCLIP, an open model. " : "The cloak didn't move GeoCLIP's guess far on this photo. ";
   else cloak = "The pixels weren't cloaked, so GeoCLIP can still place it. ";
-  return esc(cloak + `Commercial AI like ChatGPT or Claude can still recognize distinctive places from what's left: ${leftovers}. If this place matters, crop it out before posting.`);
+  return esc(cloak + `Commercial AI like ChatGPT or Claude may still recognize ${leftovers}. If this place matters, crop it out.`);
+}
+
+// move the compare line, 0 to 100
+function setSplit(percent) {
+  const value = Math.min(100, Math.max(0, percent));
+  document.getElementById("shot").style.setProperty("--x", value + "%");
+  document.getElementById("handle").setAttribute("aria-valuenow", Math.round(value));
+}
+
+// drag on the photo to compare
+function hookCompare() {
+  const shot = document.getElementById("shot");
+  const move = (event) => setSplit((event.offsetX / shot.clientWidth) * 100);
+  shot.addEventListener("pointerdown", (event) => { shot.setPointerCapture(event.pointerId); move(event); });
+  shot.addEventListener("pointermove", (event) => { if (shot.hasPointerCapture(event.pointerId)) move(event); });
+  setSplit(50);
 }
 
 // screen: protected
@@ -394,56 +562,64 @@ function renderProtected() {
   const before = protect.before.location;
   const after = protect.after.location;
   const newPlace = geo ? regionName([after.lon, after.lat], 500) : "somewhere else";
-  let headline = "Clues and metadata are gone. GeoCLIP can still place it nearby.";
-  if (moved) headline = `Protected. The same model now guesses ${esc(newPlace)}.`;
-  if (!options.cloak) headline = "Clues and metadata are gone. The pixels weren't cloaked.";
+  const clean = !protect.after.metadata_found;
+  crumbs("Scans", state.name);
+  head(state.name, clean ? chip("ok", "Protected", true) : chip("hot", "Metadata still found", true),
+    [`Protected in <b>${protect.seconds} s</b>`, "Re-attacked with <b>GeoCLIP</b>", clean ? "Metadata verified empty" : "Metadata check failed"],
+    `<a class="btn primary" id="save" href="protected/${encodeURIComponent(attack.id)}.jpg" download="unmapped.jpg">${icon("download")}Download clean copy <span class="kb">D</span></a>`);
 
-  fill("headline", headline);
   app.querySelector(".protected").style.setProperty("--ar", attack.width / attack.height);
   document.getElementById("before").src = photoUrl(attack.id);
   document.getElementById("after").src = "data:image/jpeg;base64," + protect.image_jpeg;
   const blurred = [...(options.blur_text ? attack.text : []), ...(options.blur_faces ? attack.faces : [])];
   fill("blurs", blurred.map((item) => `<div class="blurmark" style="${boxStyle(item.box, attack)}"></div>`).join(""));
-  fill("checks", checklist(attack, protect, options));
-  // the cloak varies a little each run
-  fill("p-label", (known ? "Now off by" : "GeoCLIP's guess moved") + (options.cloak ? " about" : ""));
-  fill("p-num", kmNum(protect.after.error_km));
-  app.querySelector(".p-hero").classList.toggle("moved", moved);
-  fill("p-was", known
-    ? `<p class="eyebrow">Before</p><p class="was">${kmNum(protect.before.error_km)}</p>`
-    : `<p class="fine">Without GPS, Unmapped can't know the true spot, so it measures how far the guess moved.</p>`);
-  fill("score", `${protect.score_before}<span class="to">to</span><b>${protect.score_after}</b><span class="of">/ 100</span>`);
+  fill("blur-labels", boxLabels(blurred.slice(0, 1).map((item) => ({ box: item.box, text: item.text ? "Text blurred" : "Face blurred" })), attack, "check"));
+  hookCompare();
+  const rows = changeRows(attack, protect, options, newPlace);
+  fill("checks", rows.join(""));
+  fill("step-count", `${plural(rows.filter((html) => !html.includes("Skipped")).length, "step")}, re-attacked`);
+  const top = after.top[0];
+  fill("stats", stat("New guess", coords(after), "", "mono")
+    + stat("Confidence", `${(top.prob * 100).toFixed(1)}<small>%</small>`, "Top guess")
+    + (known
+      ? stat("Now off by", `${km(protect.after.error_km)} km`, `Was ${km(protect.before.error_km)} km`, moved ? "safe" : "")
+      : stat("Guess moved", `${km(protect.after.error_km)} km`, "True spot unknown", moved ? "safe" : "")));
+  fill("score-box", scoreHtml(protect.score_after, protect.score_before));
+  const ratio = protect.after.error_km / Math.max(protect.before.error_km, 0.1);
+  if (!known) fill("ruler-title", "How far the guess moved");
+  drawRuler([
+    { km: protect.before.error_km, cls: "was", label: known ? `Before ${km(protect.before.error_km)} km` : "Before" },
+    { km: protect.after.error_km, cls: moved ? "safe" : "hot", label: `${km(protect.after.error_km)} km`, hop: ratio >= 2 ? `${Math.round(ratio).toLocaleString("en-US")}× farther away` : "" },
+  ]);
   fill("honest", honestText(attack, options, moved));
-  document.getElementById("save").href = "protected/" + encodeURIComponent(attack.id) + ".jpg";
   document.getElementById("again").addEventListener("click", renderStart);
   document.getElementById("claude-test").addEventListener("click", testClaude);
-  if (!state.claude) fill("claude-out", `<h2 class="eyebrow">Claude test is off</h2><p class="fine">No Anthropic API key on this laptop, so nothing is sent anywhere.</p>`);
-  say("Protection finished. " + document.getElementById("headline").textContent);
+  if (!state.claude) fill("claude-out", `<span class="fine">Claude check is off: no Anthropic API key on this laptop, so nothing is sent.</span>`);
+  say("Protection finished. GeoCLIP now guesses " + newPlace + ".");
   showFlightMap(before, after, moved);
 }
 
-// one column of Claude's answer
-function claudeColumn(label, answer) {
-  if (answer.refused) return `<div class="cl-col"><p class="eyebrow">${label}</p><p class="cl-place">Claude declined to guess</p></div>`;
-  const number = answer.error_km != null ? `<p class="cl-num">${kmNum(answer.error_km)}<span class="off">off</span></p>` : "";
-  return `<div class="cl-col"><p class="eyebrow">${label}</p>${number}<p class="cl-place">${esc(answer.place)}</p></div>`;
+// one line of Claude's answer
+function claudeLine(label, answer) {
+  if (answer.refused) return `<p class="cl"><span class="sl">${label}</span> declined to guess</p>`;
+  const off = answer.error_km != null ? `<b class="num">${km(answer.error_km)} km off</b> ` : "";
+  return `<p class="cl" title="${esc(answer.place)}"><span class="sl">${label}</span> ${off}${esc(answer.place)}</p>`;
 }
 
 // opt-in: asks Claude about both photos
 async function testClaude() {
   const button = document.getElementById("claude-test");
   button.disabled = true;
-  button.textContent = "Asking Claude about both photos...";
+  button.textContent = "Asking Claude...";
   try {
     const answers = await Promise.all(["original", "protected"].map((which) => postForm("claude_check", { id: state.attack.id, which })));
-    fill("claude-out", `<h2 class="eyebrow">Claude, a commercial AI, on the same two photos</h2>
-      <div class="cl-cols">${claudeColumn("Original", answers[0])}${claudeColumn("Protected", answers[1])}</div>`);
+    fill("claude-out", `<div class="cl-res"><p class="cl-head">Claude, a commercial AI</p>${claudeLine("Original", answers[0])}${claudeLine("Protected", answers[1])}</div>`);
     const still = answers[1].error_km != null && answers[1].error_km < 50;
-    if (still) document.getElementById("honest").insertAdjacentHTML("beforeend", " <b>Claude still found it. The cloak is tuned to fool the open model, not every AI.</b>");
+    if (still) fill("honest", "<b>Claude still found it.</b> The cloak is tuned to fool the open model, not every AI. If this place matters, crop it out.");
     say("Claude check finished.");
   } catch (error) {
     button.disabled = false;
-    button.textContent = "Send both photos to Claude";
+    button.textContent = "Check with Claude";
     document.getElementById("claude-out").insertAdjacentHTML("beforeend", `<p class="notice" role="alert">${esc(error.message)}</p>`);
   }
 }
@@ -452,13 +628,19 @@ async function testClaude() {
 function renderFeed() {
   show("tpl-feed", "profile");
   const feed = state.feed;
+  crumbs("Profiles", "New feed");
+  head("Profile", "", ["Add 5 to 10 photos from one account, with their captions", "Runs on this laptop"],
+    `<button type="button" class="btn primary" id="run-profile">${icon("again")}Attack this feed</button>`);
   fill("posts", feed.length
     ? `<ol class="posts">${feed.map(postRow).join("")}</ol>`
-    : `<div class="empty"><p>No photos yet. Drop them here.</p><p class="fine">Or load the example feed: 8 public photos around Huntington Beach, posted by a fictional teen.</p>
-      <div class="sample" aria-hidden="true">${feedExamples().map((example) => `<img src="${exampleUrl(example.id)}" alt="">`).join("")}</div></div>`);
-  fill("feed-count", `${feed.length} of 10 photos${feed.length < 5 ? ", add at least 5" : ""}`);
+    : `<div class="empty"><span class="drop-ico" aria-hidden="true">${icon("upload")}</span><p class="empty-title">Drop photos here</p><p class="fine">Or click Add photos. JPEG, PNG or iPhone HEIC.</p></div>`);
+  fill("feed-count", `${feed.length} of 10${feed.length < 5 ? ", add at least 5" : ""}`);
+  const count = feedExamples().length;
+  fill("example-note", count ? `${count} public photos around Huntington Beach, posted by a fictional teen` : "");
+  fill("sample", feedExamples().map((example) => `<img src="${exampleUrl(example.id)}" alt="">`).join(""));
   document.getElementById("run-profile").disabled = feed.length < 5;
-  hookFiles(document.getElementById("add"), document.getElementById("feed-drop"), "pick-many", addFeedFiles);
+  document.getElementById("add").addEventListener("click", () => pickFiles("pick-many", addFeedFiles));
+  hookDrop(document.getElementById("feed-drop"), addFeedFiles);
   document.getElementById("example-feed").addEventListener("click", loadExampleFeed);
   document.getElementById("run-profile").addEventListener("click", runProfile);
   // one listener for every row
@@ -498,6 +680,7 @@ function loadExampleFeed() {
   const picks = feedExamples();
   if (!picks.length) return renderError(state.examplesError || "The server has no example feed.");
   state.posts = picks.map((example) => ({ name: example.id + ".jpg", caption: example.caption || "", url: exampleUrl(example.id) }));
+  state.feedName = "Example feed";
   return attackFeed(getJson("profile_example", { method: "POST" }));
 }
 
@@ -510,6 +693,7 @@ function runProfile() {
     form.append("captions", post.caption);
   });
   state.posts = state.feed;
+  state.feedName = "Your feed";
   return attackFeed(getJson("profile", { method: "POST", body: form }));
 }
 
@@ -541,16 +725,17 @@ function renderProfile() {
   const alone = median(values);
   const together = known ? profile.error_km : profile.combined.radius_km;
   const count = COUNTS[photos.length] || photos.length;
-  const place = regionName([profile.combined.lon, profile.combined.lat], profile.combined.radius_km).split(",")[0];
   const flagCount = profile.captions.reduce((total, item) => total + item.flags.length, 0);
-  fill("headline", profile.combined.radius_km <= 100
-    ? `${count} ordinary posts. Together they point to one part of ${esc(place)}.`
-    : `${count} ordinary posts. Together they narrow it down to ${esc(place)}.`);
+  crumbs("Profiles", state.feedName);
+  head(state.feedName, chip("hot", `${known ? "Located within" : "Narrowed to about"} ${km(together)} km`, true),
+    [plural(photos.length, "photo"), `Scanned in <b>${profile.seconds} s</b>`, plural(flagCount, "caption clue")],
+    `<button type="button" class="btn ghost" id="edit">Edit feed</button>`);
   fill("alone-label", known ? "Each photo alone misses by" : "Each photo alone narrows to");
   fill("together-label", `All ${count.toLowerCase()} together ${known ? "miss by" : "narrow to"}`);
   fill("alone", kmNum(alone, known ? "" : "~"));
   fill("together", kmNum(together, known ? "" : "~"));
-  fill("flagged", `<b>${flagCount}</b> ${flagCount === 1 ? "clue" : "clues"} in ${plural(profile.captions.filter((item) => item.caption).length, "caption")}<br><b>${profile.score}</b> / 100 profile score<br>100 = safest`);
+  fill("score-box", scoreHtml(profile.score).replace("Privacy score", "Profile score"));
+  fill("flagged", `${plural(flagCount, "clue")} in ${plural(profile.captions.filter((item) => item.caption).length, "caption")}`);
   fill("caplist", state.posts.map((post, index) => {
     const scan = profile.captions.find((item) => item.caption === post.caption) || { flags: [] };
     const text = post.caption.trim() ? highlight(post.caption, scan.flags) : `<span class="fine">No caption</span>`;
@@ -567,8 +752,9 @@ function drawAxis(values, alone, together, known) {
   const svg = document.getElementById("axis");
   const width = svg.clientWidth;
   const axisY = svg.clientHeight - 84;
-  const x = d3.scaleLog().domain([1, 20000]).range([30, width - 50]).clamp(true);
-  const w = 150, h = 100, gap = 12, top = 34;
+  svg.setAttribute("viewBox", `0 0 ${width} ${svg.clientHeight}`);
+  const x = d3.scaleLog().domain([1, 20000]).range([40, width - 50]).clamp(true);
+  const w = 120, h = 80, gap = 12, top = 34;
   // sort by distance, then push apart
   const order = d3.sort(d3.range(values.length), (i) => values[i]);
   const lefts = [];
@@ -577,26 +763,26 @@ function drawAxis(values, alone, together, known) {
   let html = `<line class="axis" x1="${x(1)}" x2="${x(20000)}" y1="${axisY}" y2="${axisY}"/>`;
   x.ticks().forEach((tick) => {
     const major = Number.isInteger(Math.log10(tick));
-    html += `<line class="axis${major ? "" : " minor"}" x1="${x(tick)}" x2="${x(tick)}" y1="${axisY + (major ? 8 : 0)}" y2="${axisY - (major ? 14 : 7)}"/>`;
-    if (major) html += `<text class="ax-label" x="${x(tick)}" y="${axisY + 40}" text-anchor="middle">${tick.toLocaleString("en-US")} km</text>`;
+    html += `<line class="axis${major ? "" : " minor"}" x1="${x(tick)}" x2="${x(tick)}" y1="${axisY + (major ? 8 : 0)}" y2="${axisY - (major ? 12 : 6)}"/>`;
+    if (major) html += `<text class="ax-label" x="${x(tick)}" y="${axisY + 36}" text-anchor="middle">${tick.toLocaleString("en-US")} km</text>`;
   });
   order.forEach((i, k) => {
     const post = state.posts[i];
     const left = lefts[k];
     const value = x(values[i]);
     // longer leads bend lower, so they never cross
-    const elbow = top + h + 10 + Math.min(34, Math.abs(left + w / 2 - value) / 12);
+    const elbow = top + h + 8 + Math.min(20, Math.abs(left + w / 2 - value) / 12);
     html += `<path class="hang" d="M${value} ${axisY}V${elbow}H${left + w / 2}V${top + h}"/><circle class="hang-dot" cx="${value}" cy="${axisY}" r="5"/>
-      <text class="thumb-km" x="${left + w / 2}" y="${top - 10}" text-anchor="middle">${known ? "" : "~"}${km(values[i])}</text>
-      ${isHeic(post.name) ? `<rect class="heic" x="${left}" y="${top}" width="${w}" height="${h}"/>` : `<image href="${post.url}" x="${left}" y="${top}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>`}
-      <rect class="frame" x="${left}" y="${top}" width="${w}" height="${h}"/>
-      <rect class="badge" x="${left}" y="${top}" width="30" height="30"/><text class="badge-n" x="${left + 15}" y="${top + 22}" text-anchor="middle">${i + 1}</text>`;
+      <text class="thumb-km" x="${left + w / 2}" y="${top - 10}" text-anchor="middle">${known ? "" : "~"}${km(values[i])} km</text>
+      ${isHeic(post.name) ? `<rect class="heic" x="${left}" y="${top}" width="${w}" height="${h}" rx="6"/>` : `<image href="${post.url}" x="${left}" y="${top}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6px)"/>`}
+      <rect class="frame" x="${left}" y="${top}" width="${w}" height="${h}" rx="6"/>
+      <rect class="badge" x="${left + 6}" y="${top + 6}" width="28" height="28" rx="6"/><text class="badge-n" x="${left + 20}" y="${top + 26}" text-anchor="middle">${i + 1}</text>`;
   });
-  html += `<line class="median" x1="${x(alone)}" x2="${x(alone)}" y1="${axisY - 30}" y2="${axisY + 54}"/>
-    <text class="ax-note" x="${x(alone) + 10}" y="${axisY + 76}">median alone, ${km(alone)} km</text>
-    <line class="comb" x1="${x(together)}" x2="${x(together)}" y1="${axisY - 40}" y2="${axisY + 54}"/>
+  html += `<line class="median" x1="${x(alone)}" x2="${x(alone)}" y1="${axisY - 26}" y2="${axisY + 50}"/>
+    <text class="ax-note" x="${x(alone) + 10}" y="${axisY + 70}">median alone, ${km(alone)} km</text>
+    <line class="comb" x1="${x(together)}" x2="${x(together)}" y1="${axisY - 34}" y2="${axisY + 50}"/>
     <path class="comb" d="M${x(together)} ${axisY - 9}l9 9-9 9-9-9Z"/>
-    <text class="ax-note strong" x="${x(together) - 10}" y="${axisY + 76}" text-anchor="end">together, ${km(together)} km</text>`;
+    <text class="ax-note strong" x="${x(together) - 10}" y="${axisY + 70}" text-anchor="end">together, ${km(together)} km</text>`;
   svg.innerHTML = html;
 }
 
@@ -643,7 +829,7 @@ async function mapSvg(credit) {
   try {
     await loadGeo();
   } catch (error) {
-    box.insertAdjacentHTML("afterbegin", `<p class="notice">Map files are missing from frontend/vendor.</p>`);
+    box.insertAdjacentHTML("afterbegin", `<p class="pad notice">Map files are missing from frontend/vendor.</p>`);
     return null;
   }
   if (!box.isConnected) return null;
@@ -652,11 +838,9 @@ async function mapSvg(credit) {
   return box.querySelector("svg");
 }
 
-// coast with engraved water lines
-function geoLayers(path, viewKm, ripples) {
-  const land = path(geo.land);
-  let html = ripples.map((gap) => `<path class="ripple" d="${land}" style="stroke-width:${gap * 2}px"/><path class="ripple-gap" d="${land}" style="stroke-width:${gap * 2 - 1.5}px"/>`).join("");
-  html += `<path class="land" d="${land}"/>`;
+// land, borders and US lines
+function geoLayers(path, viewKm) {
+  let html = `<path class="land" d="${path(geo.land)}"/>`;
   if (viewKm < 700) html += `<path class="county" d="${path(geo.countyLines)}"/>`;
   if (viewKm < 5000) html += `<path class="state" d="${path(geo.stateLines)}"/>`;
   return html + `<path class="border" d="${path(geo.borders)}"/>`;
@@ -668,29 +852,13 @@ function mercator(center, pxPerKm, at, clip) {
   return d3.geoMercator().center([center.lon, center.lat]).scale(scale).translate(at).clipExtent(clip);
 }
 
-// degrees minutes seconds text
-function dms(value, positive, negative) {
-  const minutes = Math.round(Math.abs(value) * 60);
-  return `${Math.floor(minutes / 60)}°${minutes % 60 ? String(minutes % 60).padStart(2, "0") + "′" : ""}${value < 0 ? negative : positive}`;
-}
-
-// lat/lon lines and edge labels
-function graticule(projection, width, height, x0 = 0, y0 = 0) {
-  const [west, north] = projection.invert([x0, y0]);
-  const [east, south] = projection.invert([x0 + width, y0 + height]);
-  const step = [1 / 60, 1 / 30, 1 / 12, 1 / 6, 1 / 4, 1 / 2, 1, 2, 5, 10, 15, 30].find((s) => (east - west) / s <= 6) || 30;
+// lat/lon lines across the map
+function gridLines(projection, width, height) {
+  const [west, north] = projection.invert([0, 0]);
+  const [east, south] = projection.invert([width, height]);
+  const step = [1 / 60, 1 / 30, 1 / 12, 1 / 6, 1 / 4, 1 / 2, 1, 2, 5, 10, 15, 30].find((s) => (east - west) / s <= 8) || 30;
   const grid = d3.geoGraticule().step([step, step]).extent([[west - step, south - step], [east + step, north + step]]);
-  const ticks = (from, to) => d3.range(Math.ceil(from / step) * step, to, step);
-  let labels = "";
-  ticks(west, east).forEach((lon) => {
-    const x = projection([lon, south])[0];
-    if (x > 60 && x < width - 60) labels += `<line class="tick" x1="${x}" x2="${x}" y1="${height - 14}" y2="${height + 10}"/><line class="tick" x1="${x}" x2="${x}" y1="0" y2="14"/><text class="grat-label out" x="${x}" y="${height + 38}" text-anchor="middle">${dms(lon, "E", "W")}</text>`;
-  });
-  ticks(south, north).forEach((lat) => {
-    const y = projection([west, lat])[1];
-    if (y > 40 && y < height - 40) labels += `<line class="tick" x1="${width - 14}" x2="${width}" y1="${y}" y2="${y}"/><line class="tick" x1="0" x2="14" y1="${y}" y2="${y}"/><text class="grat-label" x="${width - 22}" y="${y + 8}" text-anchor="end">${dms(lat, "N", "S")}</text>`;
-  });
-  return { lines: `<path class="grat" d="${pathOf(projection)(grid())}"/>`, labels };
+  return `<path class="grat" d="${pathOf(projection)(grid())}"/>`;
 }
 
 // path maker that never returns null
@@ -707,67 +875,19 @@ function keptRings(area, pxPerKm, maxKm) {
   const kept = [];
   [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].forEach((ring) => {
     const last = kept[kept.length - 1] || area.radius_km;
-    if (ring >= area.radius_km * 2 && ring <= maxKm && (ring - last) * pxPerKm >= 46 && kept.length < 3) kept.push(ring);
+    if (ring >= area.radius_km * 2 && ring <= maxKm && (ring - last) * pxPerKm >= 46 && kept.length < 2) kept.push(ring);
   });
   return kept;
 }
 
-// distance rings around the guess
-function distanceRings(path, projection, area, pxPerKm, maxKm, avoid) {
-  const kept = keptRings(area, pxPerKm, maxKm);
-  // label on a diagonal with no pill nearby
-  return kept.map((ring) => {
-    const spots = [-135, -45, 135, 45].map((degrees) => {
-      const [angle, step] = [(degrees * Math.PI) / 180, ring / 111.2];
-      return projection([area.lon + (step * Math.cos(angle)) / Math.cos((area.lat * Math.PI) / 180), area.lat - step * Math.sin(angle)]);
-    });
-    const [x, y] = spots.find(([sx, sy]) => sx > 50 && avoid.every(([ax, ay]) => Math.hypot(ax - sx, ay - sy) > 70)) || spots[0];
-    return `<path class="range" d="${path(circle(area, ring))}"/>${x > 50 ? `<text class="range-label" x="${x}" y="${y + 8}" text-anchor="middle">${km(ring)} km</text>` : ""}`;
+// dashed distance rings, labeled up and right
+function distanceRings(path, projection, area, pxPerKm, maxKm) {
+  return keptRings(area, pxPerKm, maxKm).map((ring) => {
+    const step = (ring / 111.2) * Math.SQRT1_2;
+    const [x, y] = projection([area.lon + step / Math.cos((area.lat * Math.PI) / 180), area.lat + step]);
+    const label = y > 30 ? `<text class="range-label" x="${x + 6}" y="${y - 6}">${km(ring)} km</text>` : "";
+    return `<path class="range" d="${path(circle(area, ring))}"/>${label}`;
   }).join("");
-}
-
-// label on the left in the right half
-function gpsCross(projection, gps, width) {
-  const [x, y] = projection([gps.lon, gps.lat]);
-  const left = x > width / 2;
-  return `<g class="gps-cross" transform="translate(${x} ${y})"><path class="halo" d="M-18 0H18M0-18V18"/><path d="M-18 0H18M0-18V18"/><circle r="6"/>
-    <text class="map-tag" x="${left ? -24 : 24}" y="-12" text-anchor="${left ? "end" : "start"}">GPS in the file</text></g>`;
-}
-
-// italic place name and a note
-function placeTag(x, y, anchor, title, detail, cls = "") {
-  const at = `x="${x}" text-anchor="${anchor}"`;
-  return `<text class="place-tag ${cls}" ${at} y="${y}"><tspan class="pt-title">${esc(title)}</tspan><tspan class="pt-sub" ${at} dy="32">${esc(detail)}</tspan></text>`;
-}
-
-// tag beside a point, flipped if it would leave the map
-function sideTag([x, y], gap, anchor, [width, height], title, detail, cls = "") {
-  const size = gap + Math.max(title.length * 16, detail.length * 12);
-  if (anchor === "start" && x + size > width) anchor = "end";
-  else if (anchor === "end" && x - size < 0) anchor = "start";
-  return placeTag(x + (anchor === "end" ? -gap : gap), Math.min(Math.max(y - 4, 40), height - 44), anchor, title, detail, cls);
-}
-
-// move the place tag to the first spot off every ring and pill
-async function nudgeTag(svg, map, moves, avoid = []) {
-  const tag = svg.querySelector(".place-tag");
-  if (!tag) return;
-  // layout first so fonts start loading
-  tag.getBBox();
-  await document.fonts.ready;
-  const box = tag.getBBox();
-  const [cx, cy] = map.center;
-  const clear = ([dx, dy]) => {
-    const [x0, x1, y0, y1] = [box.x + dx - 14, box.x + box.width + dx + 14, box.y + dy - 8, box.y + box.height + dy + 8];
-    if (x0 < 0 || y0 < 0 || x1 > map.width || y1 > map.height) return false;
-    // rect vs ring: nearest and farthest corner
-    const near = Math.hypot(Math.max(x0 - cx, 0, cx - x1), Math.max(y0 - cy, 0, cy - y1));
-    const far = Math.hypot(Math.max(cx - x0, x1 - cx), Math.max(cy - y0, y1 - cy));
-    const offPills = avoid.every(([px, py]) => Math.hypot(Math.max(x0 - px, 0, px - x1), Math.max(y0 - py, 0, py - y1)) > 36);
-    return offPills && map.rings.every((ring) => ring < near || ring > far);
-  };
-  const [dx, dy] = moves.find(clear) || [0, 0];
-  tag.setAttribute("transform", `translate(${dx} ${dy})`);
 }
 
 // draw the guess circle
@@ -776,83 +896,62 @@ function guessCircle(path, area) {
   return `<path class="guess-halo" d="${d}"/><path class="guess" d="${d}"/>`;
 }
 
-// survey chart around a guess
-function chart(svg, area, halfKm, at, ripples, avoid = []) {
-  const width = svg.clientWidth;
-  const height = svg.clientHeight - 48;
+// html label beside a map point
+function pillAt([x, y], width, html, cls = "", dy = 0) {
+  // above or below: centered on the point
+  if (dy) return `<p class="pill at mid ${cls}" style="left:${x}px;top:${y + dy}px">${html}</p>`;
+  const flip = x > width * 0.6;
+  return `<p class="pill at ${cls}${flip ? " flip" : ""}" style="left:${x + (flip ? -20 : 20)}px;top:${y}px">${html}</p>`;
+}
+
+// regional chart around a guess
+function chart(svg, area, halfKm, center) {
+  const [width, height] = [svg.clientWidth, svg.clientHeight];
   const pxPerKm = (width * 0.5) / halfKm;
-  const projection = mercator(area, pxPerKm, [width * at[0], height * at[1]], [[-40, -40], [width + 40, height + 40]]);
+  const projection = mercator(center, pxPerKm, [width / 2, height / 2], [[-40, -40], [width + 40, height + 40]]);
   const path = pathOf(projection);
-  const grid = graticule(projection, width, height);
-  svg.setAttribute("viewBox", `0 0 ${width} ${svg.clientHeight}`);
-  return {
-    width, height, pxPerKm, projection, center: projection([area.lon, area.lat]),
-    rings: [area.radius_km, ...keptRings(area, pxPerKm, halfKm * 0.9)].map((ring) => ring * pxPerKm),
-    open: `<clipPath id="neat"><rect width="${width}" height="${height}"/></clipPath>
-      <g clip-path="url(#neat)"><rect class="sea" width="${width}" height="${height}"/>${grid.lines}${geoLayers(path, halfKm, ripples)}
-      ${distanceRings(path, projection, area, pxPerKm, halfKm * 0.9, avoid.map((point) => projection(point)))}${guessCircle(path, area)}`,
-    close: `</g><rect class="neat" width="${width}" height="${height}"/>${grid.labels}`,
-  };
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const html = `<rect class="sea" width="${width}" height="${height}"/>${gridLines(projection, width, height)}${geoLayers(path, halfKm)}
+    ${distanceRings(path, projection, area, pxPerKm, halfKm * 0.9)}${guessCircle(path, area)}`;
+  return { width, height, pxPerKm, projection, html };
 }
 
 // draw the attack map
 async function showAttackMap(attack, gps) {
-  const svg = await mapSvg("Mercator. Map data: Natural Earth, US Census Bureau.");
+  const svg = await mapSvg("Map: Mercator, Natural Earth, US Census Bureau");
   if (!svg) return;
+  const box = document.getElementById("map-box");
   const area = attack.location;
   // no county lines abroad, so show more coast
   const abroad = !geo.states.some((usState) => d3.geoContains(usState, [area.lon, area.lat]));
-  const halfKm = Math.min(Math.max(area.radius_km * 4, abroad ? 400 : 60, gps ? distanceKm(gps, area) * 1.6 : 0), 6000);
-  const loupe = (area.radius_km * svg.clientWidth * 0.5) / halfKm < 16;
-  const map = chart(svg, area, halfKm, loupe ? [0.6, 0.74] : [0.36, 0.52], [24, 14, 6]);
-  const [cx, cy] = map.center;
-  const name = regionName([area.lon, area.lat], area.radius_km).split(",")[0];
-  const detail = `the guess, within about ${km(area.radius_km)} km`;
-  let html = map.open + (loupe ? `<circle class="guess-sm" cx="${cx}" cy="${cy}" r="10"/>` : "") + (gps ? gpsCross(map.projection, gps, map.width) : "") + map.close;
-  // tag beside or below the circle
-  html += loupe ? sideTag(map.center, 30, "start", [map.width, map.height], name, detail) : placeTag(cx, cy + area.radius_km * map.pxPerKm + 44, "middle", name, detail);
-  if (loupe) html += drawLoupe(area, gps, map.pxPerKm, map.center, [214, map.height - 214]);
+  const far = gps ? distanceKm(gps, area) * (svg.clientWidth / svg.clientHeight) : 0;
+  const halfKm = Math.min(Math.max(area.radius_km * 5, abroad ? 300 : 150, far), 6000);
+  const center = gps ? { lon: (gps.lon + area.lon) / 2, lat: (gps.lat + area.lat) / 2 } : area;
+  const map = chart(svg, area, halfKm, center);
+  const [cx, cy] = map.projection([area.lon, area.lat]);
+  let html = map.html + (area.radius_km * map.pxPerKm < 12 ? `<circle class="guess-sm" cx="${cx}" cy="${cy}" r="12"/>` : "");
+  let pills = `<p class="pill corner"><i class="dot hot"></i>${esc(regionName([area.lon, area.lat], area.radius_km))}</p>`;
+  if (gps) {
+    const spot = map.projection([gps.lon, gps.lat]);
+    html += `<g class="gps-cross" transform="translate(${spot[0]} ${spot[1]})"><path class="halo" d="M-14 0H14M0-14V14"/><path d="M-14 0H14M0-14V14"/><circle r="5"/></g>`;
+    pills += pillAt(spot, map.width, "GPS in the file", "ink");
+  }
   svg.innerHTML = html;
-  if (!loupe) nudgeTag(svg, map, d3.range(0, 160, 4).flatMap((step) => [[0, -step], [0, step]]));
-}
-
-// zoomed inset for a tiny circle
-function drawLoupe(area, gps, mainPxPerKm, guessAt, center) {
-  const radius = 176;
-  const pxPerKm = Math.min(66 / area.radius_km, mainPxPerKm * 60);
-  const times = Math.round(pxPerKm / mainPxPerKm);
-  const [x0, y0] = center;
-  const projection = mercator(area, pxPerKm, center, [[x0 - radius - 40, y0 - radius - 40], [x0 + radius + 40, y0 + radius + 40]]);
-  const path = pathOf(projection);
-  // lines from the guess to the lens edge
-  const [px, py] = guessAt;
-  const angle = Math.atan2(py - y0, px - x0);
-  const spread = Math.acos(radius / Math.hypot(px - x0, py - y0));
-  const tangents = [angle - spread, angle + spread].map((a) => `<line class="tangent" x1="${px}" y1="${py}" x2="${x0 + radius * Math.cos(a)}" y2="${y0 + radius * Math.sin(a)}"/>`).join("");
-  const bar = [1, 2, 5, 10, 20].find((step) => step * pxPerKm >= 70) || 20;
-  const [gx, gy] = projection([area.lon, area.lat]);
-  return `${tangents}<clipPath id="lens"><circle cx="${x0}" cy="${y0}" r="${radius}"/></clipPath>
-    <circle class="loupe-bezel" cx="${x0}" cy="${y0}" r="${radius + 8}"/>
-    <g class="lens" clip-path="url(#lens)"><rect class="sea" x="${x0 - radius}" y="${y0 - radius}" width="${radius * 2}" height="${radius * 2}"/>
-      ${geoLayers(path, 1, [12, 6])}${graticule(projection, radius * 2, radius * 2, x0 - radius, y0 - radius).lines}
-      ${guessCircle(path, area)}<circle class="guess-dot" cx="${gx}" cy="${gy}" r="5"/>${gps ? gpsCross(projection, gps, x0 * 2) : ""}
-      <rect class="sbar-a" x="${x0 - (bar * pxPerKm) / 2}" y="${y0 + radius - 52}" width="${bar * pxPerKm}" height="8"/>
-      <text class="sbar-l" x="${x0}" y="${y0 + radius - 62}" text-anchor="middle">${bar} km</text></g>
-    <circle class="loupe-edge" cx="${x0}" cy="${y0}" r="${radius}"/>
-    <text class="loupe-title" x="${x0 - radius}" y="${y0 - radius - 26}">Enlarged ${times} times</text>`;
+  box.insertAdjacentHTML("beforeend", pills);
 }
 
 // whole world, or zoomed in on a short arc
 function flightProjection(a, b, mid, size) {
   const reach = Math.max((d3.geoDistance(a, b) * 180) / Math.PI * 0.7, 10);
   const view = reach > 45 ? { type: "Sphere" } : d3.geoCircle().center(mid).radius(reach)();
-  return d3.geoEqualEarth().rotate([-mid[0], 0]).fitExtent([[10, 10], [size[0] - 10, size[1] - 10]], view);
+  return d3.geoEqualEarth().rotate([-mid[0], 0]).fitExtent([[12, 12], [size[0] - 12, size[1] - 12]], view);
 }
 
 // world map with the guess flying away
 async function showFlightMap(before, after, moved) {
-  const svg = await mapSvg("Equal Earth. Map data: Natural Earth.");
+  const svg = await mapSvg("Map: Equal Earth, Natural Earth");
   if (!svg) return;
+  const box = document.getElementById("map-box");
   const size = [svg.clientWidth, svg.clientHeight];
   const a = [before.lon, before.lat];
   const b = [after.lon, after.lat];
@@ -860,29 +959,35 @@ async function showFlightMap(before, after, moved) {
   const projection = flightProjection(a, b, d3.geoInterpolate(a, b)(0.5), size);
   const path = pathOf(projection);
   const [pa, pb] = [projection(a), projection(b)];
-  // labels on the outer sides
-  const left = pa[0] < pb[0];
-  const oldName = regionName(a, before.radius_km > 25 ? before.radius_km : 100);
-  const newName = regionName(b, 500);
   svg.setAttribute("viewBox", `0 0 ${size[0]} ${size[1]}`);
   const sphere = path({ type: "Sphere" });
-  svg.innerHTML = `<clipPath id="globe"><path d="${sphere}"/></clipPath><path class="sea" d="${sphere}"/>
-    <g clip-path="url(#globe)"><path class="grat" d="${path(d3.geoGraticule().step([30, 30])())}"/>${geoLayers(path, 9000, [5])}</g>
+  // the other top guesses, sized by chance
+  const others = after.top.slice(1).map((guess) => {
+    const [x, y] = projection([guess.lon, guess.lat]);
+    return `<circle class="other" cx="${x}" cy="${y}" r="${3 + guess.prob * 20}"/>`;
+  }).join("");
+  svg.innerHTML = `<clipPath id="globe"><path d="${sphere}"/></clipPath><path class="globe" d="${sphere}"/>
+    <g clip-path="url(#globe)"><path class="grat" d="${path(d3.geoGraticule().step([30, 30])())}"/>${geoLayers(path, 9000)}</g>
     <path class="sphere" d="${sphere}"/>
-    ${moved ? `<path class="arc-under" d="${path(arc)}"/><path class="arc" pathLength="1" d="${path(arc)}"/>` : ""}
-    <circle class="old-ring" cx="${pa[0]}" cy="${pa[1]}" r="20"/><circle class="old-core" cx="${pa[0]}" cy="${pa[1]}" r="6"/>
-    <circle class="new-ring" cx="${pb[0]}" cy="${pb[1]}" r="18"/><circle class="new-core" cx="${pb[0]}" cy="${pb[1]}" r="6"/>
-    ${sideTag(pa, 30, left ? "end" : "start", size, oldName, "old guess")}
-    ${sideTag(pb, 30, left ? "start" : "end", size, newName, moved ? "where it guesses now" : "new guess", "safe")}`;
+    <path class="arc" d="${path(arc)}"/>
+    <circle class="old-ring" cx="${pa[0]}" cy="${pa[1]}" r="9"/><circle class="old-core" cx="${pa[0]}" cy="${pa[1]}" r="3"/>
+    ${others}<circle class="new-ring" cx="${pb[0]}" cy="${pb[1]}" r="24"/>`;
+  const oldName = regionName(a, before.radius_km).split(",")[0];
+  const newName = regionName(b, 500);
+  // same height: one pill above, one below
+  const dy = Math.abs(pa[1] - pb[1]) < 60 ? 46 : 0;
+  box.insertAdjacentHTML("beforeend", pillAt(pa, size[0], "Was: " + esc(oldName), "muted", dy)
+    + pillAt(pb, size[0], `<i class="dot ${moved ? "safe" : "hot"}"></i>Now: ${esc(newName)}`, "", -dy));
 }
 
 // regional map with every photo's guess
 async function showProfileMap(profile) {
-  const svg = await mapSvg("Mercator. Map data: Natural Earth, US Census Bureau.");
+  const svg = await mapSvg("Map: Mercator, Natural Earth, US Census Bureau");
   if (!svg) return;
+  const box = document.getElementById("map-box");
   const area = profile.combined;
   const guesses = profile.photos.map((photo) => [photo.location.lon, photo.location.lat]);
-  const map = chart(svg, area, Math.max(area.radius_km * 4, 220), [0.75, 0.6], [20, 12, 5], guesses);
+  const map = chart(svg, area, Math.max(area.radius_km * 4, 300), area);
   // nearby pills share one label
   const pills = [];
   let offMap = 0;
@@ -895,14 +1000,37 @@ async function showProfileMap(profile) {
   });
   const pillHtml = pills.map((pill) => {
     const text = pill.labels.join(", ");
-    const w = 18 + text.length * 13;
-    return `<g class="pmark" transform="translate(${pill.x} ${pill.y})"><rect x="${-w / 2}" y="-17" width="${w}" height="34" rx="17"/><text y="8" text-anchor="middle">${text}</text></g>`;
+    const w = 18 + text.length * 11;
+    return `<g class="pmark" transform="translate(${pill.x} ${pill.y})"><rect x="${-w / 2}" y="-15" width="${w}" height="30" rx="15"/><text y="7" text-anchor="middle">${text}</text></g>`;
   }).join("");
-  const name = regionName([area.lon, area.lat], area.radius_km).split(",")[0];
-  const tag = sideTag(map.center, area.radius_km * map.pxPerKm + 18, "start", [map.width, map.height], name, `all together, within about ${km(area.radius_km)} km`);
-  svg.innerHTML = map.open + pillHtml + tag + map.close;
-  nudgeTag(svg, map, d3.range(0, 400, 6).flatMap((step) => [0, 30, -30].map((dy) => [-step, dy])), pills.map((pill) => [pill.x, pill.y]));
-  svg.insertAdjacentHTML("afterend", `<p class="map-note">Pills: each photo's own guess.${offMap ? ` ${offMap} more ${offMap === 1 ? "is" : "are"} off this map.` : ""}</p>`);
+  svg.innerHTML = map.html + pillHtml;
+  const name = regionName([area.lon, area.lat], area.radius_km);
+  box.insertAdjacentHTML("beforeend", `<p class="pill corner"><i class="dot hot"></i>${esc(name)}, within about ${km(area.radius_km)} km</p>`);
+  if (offMap) fill("map-aside", `Pills: each photo's guess, ${offMap} off this map`);
+}
+
+// keyboard shortcuts shown in the UI
+function onKey(event) {
+  if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    return openPhoto();
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest("input, textarea")) return;
+  const key = event.key.toLowerCase();
+  const click = (id) => document.getElementById(id) && !document.getElementById(id).disabled && document.getElementById(id).click();
+  if (key === "1") click("tab-attack");
+  if (key === "2") click("tab-protect");
+  if (key === "3") click("tab-profile");
+  if (key === "p") click("protect");
+  if (key === "d") click("save");
+  if (state.screen === "tpl-attack" && key === "h") photoMode("heat");
+  if (state.screen === "tpl-attack" && key === "t") photoMode("text");
+  if (state.screen === "tpl-attack" && key === "o") photoMode("original");
+  if (state.screen === "tpl-protected" && (key === "arrowleft" || key === "arrowright")) {
+    event.preventDefault();
+    const now = Number(document.getElementById("handle").getAttribute("aria-valuenow"));
+    setSplit(now + (key === "arrowleft" ? -5 : 5));
+  }
 }
 
 // start the app
@@ -912,9 +1040,12 @@ async function init() {
   let theme = "light";
   try { theme = localStorage.getItem("theme") || "light"; } catch (error) {}
   setTheme(theme);
+  if (!/Mac|iPhone|iPad/.test(navigator.platform)) fill("cmd-key", "Ctrl K");
   document.getElementById("theme").addEventListener("click", () => {
     setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
   });
+  document.getElementById("cmd").addEventListener("click", openPhoto);
+  document.addEventListener("keydown", onKey);
   document.getElementById("tab-attack").addEventListener("click", () => (state.attack ? renderAttack() : renderStart()));
   document.getElementById("tab-protect").addEventListener("click", renderProtected);
   document.getElementById("tab-profile").addEventListener("click", () => (state.profile ? renderProfile() : renderFeed()));
